@@ -20,8 +20,36 @@ export type LlmCall = (req: LlmRequest) => Promise<LlmResponse>;
 export class LlmError extends Error {}
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
 const DEFAULT_MODELS = 'gemini-3.5-flash,gemini-3.8-flash,gemini-2.5-flash';
+const MAX_WAIT_MS = 60_000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const isLegacy = (model: string) => /^gemini-[12]\./.test(model);
+
+function waitBeforeRetry(body: string, attempt: number): number | null {
+  const hint = body.match(/"retryDelay":\s*"(\d+(?:\.\d+)?)s"/);
+  if (hint) {
+    const ms = Number(hint[1]) * 1000;
+    return ms <= MAX_WAIT_MS ? ms : null;
+  }
+  return Math.min(2000 * 2 ** (attempt - 1) + Math.random() * 1000, MAX_WAIT_MS);
+}
+
+function requestBody(req: LlmRequest, model: string, thinkingLevel?: string): string {
+  const legacy = isLegacy(model);
+  return JSON.stringify({
+    systemInstruction: { parts: [{ text: req.system }] },
+    contents: [{ role: 'user', parts: [{ text: req.user }] }],
+    generationConfig: {
+      ...(legacy ? { temperature: 0 } : {}),
+      maxOutputTokens: 16384,
+      responseMimeType: 'application/json',
+      responseJsonSchema: req.schema,
+      ...(thinkingLevel && !legacy ? { thinkingConfig: { thinkingLevel } } : {}),
+    },
+  });
+}
 
 export function geminiCall(opts: {
   apiKey?: string;
@@ -36,34 +64,31 @@ export function geminiCall(opts: {
 
   return async (req) => {
     if (!apiKey) throw new LlmError('GEMINI_API_KEY is not set (.env)');
-    const body = JSON.stringify({
-      systemInstruction: { parts: [{ text: req.system }] },
-      contents: [{ role: 'user', parts: [{ text: req.user }] }],
-      generationConfig: {
-        temperature: 0,
-        maxOutputTokens: 16384,
-        responseMimeType: 'application/json',
-        responseJsonSchema: req.schema,
-        ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
-      },
-    });
     const failures: string[] = [];
 
     for (const model of models) {
-      const url = `${API_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body,
-          signal: AbortSignal.timeout(180_000),
-        });
-        if (res.ok) return parseResponse((await res.json()) as GeminiBody, model);
-        const detail = (await res.text()).slice(0, 300);
-        if (!RETRYABLE.has(res.status)) throw new LlmError(`Gemini ${model} HTTP ${res.status}: ${detail}`);
-        failures.push(`${model} HTTP ${res.status}`);
-        if (res.status === 429 || attempt === maxAttempts) break;
-        await new Promise((r) => setTimeout(r, 2000 * 2 ** (attempt - 1)));
+        let res: Response | null = null;
+        let detail = '';
+        try {
+          res = await fetch(`${API_BASE}/${encodeURIComponent(model)}:generateContent`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+            body: requestBody(req, model, thinkingLevel),
+            signal: AbortSignal.timeout(180_000),
+          });
+        } catch (e) {
+          detail = (e as Error).message;
+        }
+        if (res?.ok) return parseResponse((await res.json()) as GeminiBody, model);
+        if (res) {
+          detail = await res.text();
+          if (!RETRYABLE.has(res.status)) throw new LlmError(`Gemini ${model} HTTP ${res.status}: ${detail.slice(0, 300)}`);
+        }
+        failures.push(`${model} ${res ? `HTTP ${res.status}` : `network: ${detail.slice(0, 80)}`}`);
+        const wait = attempt < maxAttempts ? waitBeforeRetry(detail, attempt) : null;
+        if (wait === null) break;
+        await sleep(wait);
       }
     }
     throw new LlmError(`Gemini unavailable: ${failures.join('; ')}`);

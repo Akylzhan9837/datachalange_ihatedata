@@ -10,13 +10,12 @@ const flag = (name: string) => {
   const i = args.indexOf(name);
   return i >= 0 ? args.splice(i, 2)[1] : undefined;
 };
-const allowCalls = args.includes('--allow-calls');
 const setPath = flag('--set') ?? 'data/sets/DEV.json';
 const clPath = flag('--checklist') ?? 'data/checklists/cqa-full.json';
 const ids = args.filter((a) => !a.startsWith('--'));
 
 if (!ids.length) {
-  console.error('npx tsx scripts/try.ts <conversation_id>... [--set file] [--checklist file] [--allow-calls]');
+  console.error('npx tsx scripts/try.ts <conversation_id>... [--set file] [--checklist file]');
   process.exit(1);
 }
 
@@ -32,15 +31,12 @@ for (const id of ids) {
     console.error(`${id}: нет в ${setPath}`);
     continue;
   }
-  if (conv.channel !== 'agent chat' && !allowCalls) {
-    console.error(`${id}: это звонок, пропущен (нужен --allow-calls)`);
-    continue;
-  }
   try {
     const r = await evaluateConversation(conv, cl, llm);
+    const votes = r.votes > 1 ? ` · голосов ${r.votes}` : '';
     const file = path.join(outDir, `${id}.${Date.now()}.json`);
     fs.writeFileSync(file, JSON.stringify(r, null, 2));
-    console.log(`\n${id} · ${r.model} · вызовов ${r.usage.calls} · токены ${r.usage.input_tokens}/${r.usage.output_tokens} · ${r.duration_ms} мс`);
+    console.log(`\n${id} · ${r.model} · вызовов ${r.usage.calls}${votes} · токены ${r.usage.input_tokens}/${r.usage.output_tokens} · ${r.duration_ms} мс`);
     for (const i of r.items) {
       const ev = i.evidence.map((n) => `#${n}`).join(',') || '—';
       const rng = i.checked_range ? ` [#${i.checked_range[0]}–#${i.checked_range[1]}]` : '';
