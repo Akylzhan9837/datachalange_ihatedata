@@ -9,6 +9,7 @@ export interface EvalCriterion extends ChecklistCriterion {
   na_condition?: string;
   step_desc?: Record<string, string>;
   guidance?: string[];
+  code?: string;
 }
 export interface EvalChecklist extends Checklist {
   criteria: EvalCriterion[];
