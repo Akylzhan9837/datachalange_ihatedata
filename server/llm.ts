@@ -1,15 +1,12 @@
-// Gemini generateContent over REST (no SDK dependency). Owner: ТЛ.
-// Docs: POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key=...
-
 export interface LlmRequest {
   system: string;
   user: string;
-  schema: object; // JSON Schema for the answer (responseJsonSchema)
+  schema: object;
 }
 
 export interface LlmUsage {
   input_tokens: number;
-  output_tokens: number; // answer + thinking tokens
+  output_tokens: number;
 }
 
 export interface LlmResponse {
@@ -32,9 +29,8 @@ export function geminiCall(opts: {
   maxAttempts?: number;
 } = {}): LlmCall {
   const apiKey = opts.apiKey ?? process.env.GEMINI_API_KEY;
-  // shortcut: default model from the docs list on 2026-11-07; confirm its free-tier limits in AI Studio.
   const model = opts.model ?? process.env.GEMINI_MODEL ?? 'gemini-3.8-flash';
-  const thinkingLevel = opts.thinkingLevel ?? process.env.GEMINI_THINKING_LEVEL; // MINIMAL | LOW | MEDIUM | HIGH, Gemini 3+
+  const thinkingLevel = opts.thinkingLevel ?? process.env.GEMINI_THINKING_LEVEL;
   const maxAttempts = opts.maxAttempts ?? 4;
 
   return async (req) => {
@@ -50,7 +46,6 @@ export function geminiCall(opts: {
         ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
       },
     };
-    // The key goes in the query string (documented); never put the URL into errors or logs.
     const url = `${API_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
     for (let attempt = 1; ; attempt++) {
@@ -65,7 +60,7 @@ export function geminiCall(opts: {
       if (!RETRYABLE.has(res.status) || attempt >= maxAttempts) {
         throw new LlmError(`Gemini HTTP ${res.status}: ${detail}`);
       }
-      await new Promise((r) => setTimeout(r, 2000 * 2 ** (attempt - 1))); // 2s, 4s, 8s
+      await new Promise((r) => setTimeout(r, 2000 * 2 ** (attempt - 1)));
     }
   };
 }

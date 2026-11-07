@@ -1,5 +1,3 @@
-// Builds the evaluation prompt from the checklist, calls the model, validates the answer. Owner: ТЛ.
-// Scores are NOT computed here — the caller passes items to shared scoring (Б2).
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Checklist, ChecklistCriterion, Conversation } from '../shared/types.js';
@@ -7,7 +5,6 @@ import type { LlmCall, LlmUsage } from './llm.js';
 
 export const PROMPT_VERSION = 'v0';
 
-// Optional fields the prompt uses; checklists without them still work.
 export interface EvalCriterion extends ChecklistCriterion {
   na_condition?: string;
   step_desc?: Record<string, string>;
@@ -49,7 +46,6 @@ export class EvaluationError extends Error {}
 
 const ROLE: Record<string, string> = { client: 'КЛИЕНТ', operator: 'ОПЕРАТОР', bot: 'БОТ', system: 'СИСТЕМА' };
 
-// Calls carry ISO timestamps with 7 fractional digits; trim to ms so Date.parse is reliable.
 const isoMs = (ts: string) => Date.parse(ts.replace(/(\.\d{3})\d+/, '$1'));
 const mmss = (sec: number) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
 
@@ -57,7 +53,6 @@ export function renderTranscript(conv: Conversation): string {
   const t0 = isoMs(conv.transcript[0]?.timestamp ?? '');
   const lines = conv.transcript.map((m, i) => {
     const ms = isoMs(m.timestamp);
-    // Chat timestamps are already MM:SS; calls become an offset from the first event.
     const time = Number.isNaN(ms) || Number.isNaN(t0) ? m.timestamp : mmss(Math.max(0, (ms - t0) / 1000));
     return `[#${i + 1} ${ROLE[m.speaker] ?? String(m.speaker).toUpperCase()} ${time}] ${m.text.replace(/\s*\n\s*/g, ' ')}`;
   });
@@ -131,7 +126,6 @@ export function buildPrompt(cl: EvalChecklist, conv: Conversation) {
 
 interface Checked { items: EvalItem[]; hard: string[] }
 
-// Hard errors (wrong/missing answers, broken JSON) → retry, then fail. Soft errors (evidence, ranges, texts) → needs_review.
 export function checkAnswer(cl: EvalChecklist, conv: Conversation, text: string): Checked {
   let parsed: unknown;
   try { parsed = JSON.parse(text); } catch { return { items: [], hard: ['ответ не является JSON'] }; }
@@ -208,7 +202,7 @@ export async function evaluateConversation(conv: Conversation, cl: EvalChecklist
         prompt_version: PROMPT_VERSION,
         model,
         usage,
-        cost_usd: 0, // shortcut: Gemini free tier; compute from usage × price if a paid tier is used
+        cost_usd: 0,
         duration_ms: Date.now() - started,
         created_at: new Date().toISOString(),
         items,
