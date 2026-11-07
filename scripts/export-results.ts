@@ -4,6 +4,7 @@ import path from 'node:path';
 import { evaluateConversation, PROMPT_VERSION, type EvalChecklist, type EvaluationDraft } from '../server/evaluate.js';
 import { LlmError } from '../server/llm.js';
 import { errorEntry, okEntry, resultsProblems, type ResultEntry, type ResultsFile } from '../server/results.js';
+import { getEvaluationByConversation, listAppeals } from '../server/store.js';
 import { computeScore } from '../shared/scoring.js';
 import type { Conversation, DatasetResponse } from '../shared/types.js';
 
@@ -61,7 +62,22 @@ function cachedDraft(id: string): EvaluationDraft | null {
     const d = JSON.parse(fs.readFileSync(f, 'utf-8')) as EvaluationDraft;
     if (d.conversation_id === id && d.checklist_id === cl.id && d.checklist_version === cl.version && d.prompt_version === PROMPT_VERSION) return d;
   }
-  return null;
+  return storedDraft(id);
+}
+
+const appealed = new Set(listAppeals().filter((a) => a.status === 'accepted').map((a) => a.evaluation_id));
+
+function storedDraft(id: string): EvaluationDraft | null {
+  const e = getEvaluationByConversation(id, cl.id, cl.version);
+  if (!e || appealed.has(e.id)) return null;
+  return {
+    conversation_id: id, checklist_id: e.checklist_id, checklist_version: e.checklist_version, prompt_version: PROMPT_VERSION,
+    model: e.model, votes: 1, usage: { calls: 0, input_tokens: 0, output_tokens: 0 }, cost_usd: e.cost, duration_ms: 0, created_at: e.evaluated_at,
+    items: e.items.map((it) => ({
+      criterion_id: it.criterion_id, analysis: '', answer: it.answer, evidence: it.evidence ?? [], checked_range: it.checked_range ?? null,
+      reason: it.reason, na_reason: it.na_reason ?? null, needs_review: Boolean(it.needs_review), review_reason: it.review_reason ?? null,
+    })),
+  };
 }
 
 const records = await loadSet(group);
