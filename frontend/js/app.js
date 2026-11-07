@@ -1,4 +1,5 @@
-import { getChecklist, getChecklists, getDialogues, getEvaluation, runEvaluation } from './api.js';
+import { getChecklist, getChecklists, getDialogues, getEvaluation, getEvaluationById, runEvaluation } from './api.js';
+import './dashboard.js';
 import { clearAppeals, openAppeal, renderAppeals } from './appeals.js';
 import { openEditor } from './editor.js';
 import { answerLabel, byId, button, element, errorText, fillOptions, number, setStatus } from './ui.js';
@@ -13,6 +14,8 @@ const retry = byId('retry');
 const search = byId('search');
 const channel = byId('channel');
 const language = byId('language');
+const grossOnly = byId('gross-only');
+const latestEvaluations = new Map();
 let records = [];
 let activeId;
 let checklists = [];
@@ -24,6 +27,7 @@ const sessionResults = new Map();
 const picker = byId('checklist-picker');
 const batchButton = byId('run-batch');
 const singleButton = byId('run-single');
+const rerunButton = byId('rerun-single');
 const editorButton = byId('open-editor');
 const reviewer = byId('reviewer');
 const roles = { client: 'Клиент', operator: 'Оператор', bot: 'Бот', system: 'Система' };
@@ -96,12 +100,23 @@ function renderEvaluation(result, checklist) {
     summary.append(element('p', section + ': ' + number(score)));
   }
 
+  if (Number.isFinite(result.total_score)) {
+    const meter = element('meter');
+    meter.min = 0;
+    meter.max = 100;
+    meter.value = result.total_score;
+    meter.setAttribute('aria-label', 'Итоговый балл');
+    summary.append(meter);
+  }
   const criteria = result.items.map((item) => {
-    const row = element('article', undefined, 'criterion');
-    row.append(
+    const row = element('details', undefined, 'criterion');
+    row.open = Boolean(item.needs_review || (result.gross_violation && String(item.criterion_id).padStart(2, '0') === '08'));
+    const heading = element('summary');
+    heading.append(
       element('h3', titles.get(item.criterion_id) ?? item.criterion_id),
       element('p', answerLabel(item.answer) + ' · Баллы: ' + number(item.points) + (Number.isFinite(item.max_points) ? ' / ' + number(item.max_points) : '') + ' · Вес: ' + number(item.weight), 'meta')
     );
+    row.append(heading);
     if (item.needs_review) row.append(element('p', '⚠️ На проверку' + (item.review_reason ? ' · ' + item.review_reason : ''), 'review-flag'));
     if (item.reason) row.append(element('p', item.reason));
     if (item.answer === 'na' && item.na_reason && item.na_reason !== item.reason) row.append(element('p', item.na_reason));
@@ -135,7 +150,9 @@ function syncActions() {
   const hasChecklist = Boolean(selectedChecklist());
   batchButton.disabled = blocked || !records.length || !hasChecklist;
   singleButton.disabled = blocked || !activeId || !hasChecklist;
+  rerunButton.disabled = singleButton.disabled;
   editorButton.disabled = blocked || !hasChecklist;
+  byId('nav-editor').disabled = editorButton.disabled;
   picker.disabled = blocked || !checklists.length;
   byId('group').disabled = blocked;
   byId('dataset-form').querySelector('button').disabled = blocked;
@@ -154,7 +171,7 @@ function renderHistory(result, checklist) {
     onEvidence: showEvidence,
     onDecision: async () => {
       if (activeResult?.id !== result.id) return;
-      const refreshed = await getEvaluation(result.conversation_id);
+      const refreshed = await getEvaluationById(result.id);
       if (activeResult?.id !== result.id || refreshed?.id !== result.id) return;
       displayEvaluation(remember(refreshed), checklist);
     }
@@ -172,6 +189,7 @@ function remember(result) {
 function displayEvaluation(result, checklist) {
   if (!Array.isArray(result.items)) throw new Error('В оценке нет результатов по критериям.');
   activeResult = result;
+  document.dispatchEvent(new CustomEvent('evaluation-loaded', { detail: result }));
   renderEvaluation(result, checklist);
   setStatus(evaluationStatus, '');
   void renderHistory(result, checklist);
@@ -199,7 +217,9 @@ async function selectDialogue(record, selectedButton) {
   syncActions();
   setStatus(evaluationStatus, 'Загружаем сохранённую оценку…');
   try {
-    const result = await getEvaluation(record.conversation_id, signal);
+    const savedId = latestEvaluations.get(record.conversation_id)?.id;
+    const saved = savedId ? await getEvaluationById(savedId, signal) : null;
+    const result = saved ?? await getEvaluation(record.conversation_id, signal);
     if (signal.aborted) return;
     if (result) await present(result, signal);
     else setStatus(evaluationStatus, 'Оценки пока нет. Выберите чек-лист и нажмите «Оценить».');
@@ -208,11 +228,37 @@ async function selectDialogue(record, selectedButton) {
   }
 }
 
+function updateDialogueResult(badge, result) {
+  const score = Number.isFinite(result?.total_score) ? number(result.total_score) + ' / 100' : '';
+  badge.replaceChildren();
+  if (score) badge.append(element('span', score, 'dialogue-score'));
+  if (result?.gross_violation === true) badge.append(element('span', 'Грубая ошибка', 'dialogue-gross'));
+  badge.hidden = !badge.childElementCount;
+}
+
+function rememberLatestEvaluation(result) {
+  const id = result.conversation_id;
+  const previous = latestEvaluations.get(id);
+  if (previous && (Date.parse(previous.evaluated_at) || 0) > (Date.parse(result.evaluated_at) || 0)) return;
+  latestEvaluations.set(id, result);
+  const badge = Array.from(dialogues.querySelectorAll('[data-evaluation-for]')).find((node) => node.dataset.evaluationFor === id);
+  if (grossOnly.checked && Boolean(previous?.gross_violation) !== Boolean(result.gross_violation)) renderDialogues();
+  else if (badge) updateDialogueResult(badge, result);
+}
+
 function renderDialogues() {
+  for (const name of ['channel', 'language']) {
+    const value = byId(name).value;
+    for (const control of document.querySelectorAll('[data-' + name + ']')) {
+      control.setAttribute('aria-pressed', String(control.dataset[name] === value));
+    }
+  }
+  byId('language-label').textContent = language.value || 'Все языки';
   const query = search.value.trim().toLocaleLowerCase('ru');
   const visible = records.filter((record) => {
     if (channel.value && record.channel !== channel.value) return false;
     if (language.value && record.language !== language.value) return false;
+    if (grossOnly.checked && latestEvaluations.get(record.conversation_id)?.gross_violation !== true) return false;
     return !query || record.conversation_id.toLowerCase().includes(query) ||
       record.transcript.some((message) => message.text.toLocaleLowerCase('ru').includes(query));
   });
@@ -225,6 +271,10 @@ function renderDialogues() {
     if (record.conversation_id === activeId) trigger.setAttribute('aria-current', 'true');
     trigger.append(element('strong', preview || record.conversation_id));
     trigger.append(element('span', record.conversation_id + ' · ' + record.language + ' · ' + channelName(record.channel), 'meta'));
+    const badge = element('span', undefined, 'dialogue-result');
+    badge.dataset.evaluationFor = record.conversation_id;
+    updateDialogueResult(badge, latestEvaluations.get(record.conversation_id));
+    trigger.append(badge);
     item.append(trigger);
     return item;
   }));
@@ -241,6 +291,8 @@ async function loadDialogues(requested) {
     const incoming = await getDialogues(requested);
     selection?.abort();
     records = incoming;
+    byId('stat-total').textContent = records.length;
+    document.dispatchEvent(new CustomEvent('dataset-loaded', { detail: records }));
     groupId = requested;
     byId('group-label').textContent = groupId;
     activeId = undefined;
@@ -248,6 +300,7 @@ async function loadDialogues(requested) {
     search.value = '';
     channel.value = '';
     language.value = '';
+    grossOnly.checked = false;
     byId('conversation-meta').textContent = '';
     byId('recording').hidden = true;
     transcript.replaceChildren();
@@ -279,36 +332,40 @@ async function loadChecklists() {
   }
 }
 
-async function evaluateOne(id, checklist) {
-  const result = await runEvaluation(id, checklist.id);
+async function evaluateOne(id, checklist, force = false) {
+  const result = await runEvaluation(id, checklist.id, force);
   if (result.conversation_id !== id || result.checklist_id !== checklist.id || result.checklist_version !== checklist.version || !Array.isArray(result.items)) {
     const error = new Error('Сервер вернул оценку для другой версии чек-листа или другого диалога.');
     error.stop = true;
     throw error;
   }
   const saved = remember(result);
+  if (activeId !== id) document.dispatchEvent(new CustomEvent('evaluation-loaded', { detail: saved }));
   if (activeId === id) {
     selection?.abort();
     displayEvaluation(saved, checklist);
   }
 }
 
-singleButton.addEventListener('click', async () => {
+async function evaluateSelected(force) {
   const id = activeId;
   const checklist = selectedChecklist();
   if (job || !id || !checklist) return;
   job = { type: 'single' };
   syncActions();
-  setStatus(evaluationStatus, 'Оценка выполняется…');
+  setStatus(evaluationStatus, force ? 'Запускаем новую оценку…' : 'Оценка выполняется…');
   try {
-    await evaluateOne(id, checklist);
+    await evaluateOne(id, checklist, force);
   } catch (error) {
     if (activeId === id) setStatus(evaluationStatus, errorText(error));
   } finally {
     job = undefined;
     syncActions();
   }
-});
+}
+
+singleButton.addEventListener('click', () => evaluateSelected(false));
+rerunButton.addEventListener('click', () => evaluateSelected(true));
 
 batchButton.addEventListener('click', async () => {
   const checklist = selectedChecklist();
@@ -386,5 +443,11 @@ retry.addEventListener('click', () => {
 search.addEventListener('input', renderDialogues);
 channel.addEventListener('change', renderDialogues);
 language.addEventListener('change', renderDialogues);
+grossOnly.addEventListener('change', renderDialogues);
+document.addEventListener('evaluation-list-loaded', ({ detail }) => {
+  for (const result of detail) rememberLatestEvaluation(result);
+  grossOnly.disabled = false;
+});
+document.addEventListener('evaluation-loaded', ({ detail }) => rememberLatestEvaluation(detail));
 void loadDialogues(groupId);
 void loadChecklists();

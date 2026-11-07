@@ -3,61 +3,101 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light dark">
+  <script src="./js/appearance.js"></script>
   <title>Контроль качества · CQA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./css/styles.css">
   <script type="module" src="./js/app.js"></script>
 </head>
 <body>
-  <div class="atmosphere" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div class="atmosphere" aria-hidden="true"><i></i><i></i><i></i></div>
   <div class="shell">
     <aside class="sidebar" aria-labelledby="dialogues-title">
       <div class="brand">
         <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v12H9l-6 4z"/><path d="m8 11 3 3 5-5"/></svg></span>
-        <div><strong>Контроль качества</strong><small>FREEDOM BROKER / CQA</small></div>
+        <div><strong>QUALITY CONTROL</strong><small>Рабочее пространство</small></div>
       </div>
-      <div class="sidebar-head"><h2 id="dialogues-title">Диалоги</h2><span id="count" class="count" hidden></span></div>
-      <div id="filters" class="filters" hidden>
-        <label class="search">
-          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
-          <input id="search" type="search" placeholder="Найти диалог" aria-label="Поиск по ID или тексту диалога">
-        </label>
-        <div class="selects">
-          <select id="channel" aria-label="Тип диалога"><option value="">Все типы</option><option value="agent chat">Чаты</option><option value="voice call">Звонки</option></select>
-          <select id="language" aria-label="Язык диалога"><option value="">Все языки</option><option value="RU">RU</option><option value="KZ">KZ</option><option value="EN">EN</option></select>
-        </div>
-      </div>
-      <p id="list-status" class="status" role="status">Загружаем диалоги…</p>
-      <button type="button" id="retry" class="action" hidden>Повторить загрузку</button>
-      <ul id="dialogues" class="dialogues"></ul>
+      <nav class="navigation" aria-label="Навигация">
+        <a class="nav-item" href="#overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg> Обзор</a>
+        <a class="nav-item" href="#workspace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 4H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3l4 3v-3h7a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Z"/><path d="M8 10h8"/></svg> Рабочая область</a>
+        <button type="button" class="nav-item" id="nav-editor" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="16" rx="3"/><path d="M9 5V3h6v2m-6 7 2 2 4-4"/></svg> Чек-лист</button>
+      </nav>
       <form id="dataset-form" class="sidebar-foot">
         <label for="group">Набор данных</label>
         <div><input id="group" value="DEV" required pattern="[A-Za-z0-9_\-]{1,64}" aria-label="ID набора"><button class="action" type="submit" aria-label="Открыть набор">↗</button></div>
       </form>
     </aside>
     <main>
-      <header class="topbar"><span>Контроль качества <span class="divider">/</span> Диалоги</span><span class="dataset"><span class="dot"></span><span id="group-label">DEV</span></span></header>
+      <header class="topbar">
+        <span class="breadcrumb">Контроль качества <span class="divider">/</span> Обзор</span>
+        <div class="header-controls"><span class="dataset"><span class="dot"></span><span id="group-label">DEV</span></span><div class="segmented theme-control" role="group" aria-label="Тема оформления"><button type="button" data-theme-choice="light" aria-label="Светлая тема" title="Светлая тема" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4 19 5"/></svg></button><button type="button" data-theme-choice="dark" aria-label="Тёмная тема" title="Тёмная тема" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 15a8.5 8.5 0 0 1-11-11 8.5 8.5 0 1 0 11 11Z"/></svg></button><button type="button" data-theme-choice="system" aria-label="Системная тема" title="Системная тема" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></button></div></div>
+      </header>
       <div class="content">
-        <div class="intro">
+        <section id="overview" class="intro home-view" aria-labelledby="overview-title">
+          <img class="glass-art" src="./assets/emerald-glass.svg" alt="" draggable="false">
           <div class="intro-copy">
-            <div class="eyebrow"><span></span> CONVERSATION QUALITY</div>
-            <h1>Анализ диалогов<span>.</span></h1>
-            <p>Транскрипты, критерии и решения по апелляциям.</p>
+            <div class="eyebrow">РАБОЧАЯ ПАНЕЛЬ</div>
+            <h1 id="overview-title">Добро пожаловать<br>в рабочее пространство</h1>
+            <p>Контроль качества. Аналитика. Оценка операторов.</p>
           </div>
           <button type="button" id="run-batch" class="primary" disabled><span aria-hidden="true">▸</span> Оценить весь набор</button>
+        </section>
+        <dl class="dataset-stats home-view" aria-label="Состав выбранного набора">
+          <div><dt>Диалоги</dt><dd id="stat-total">—</dd></div>
+          <div><dt>Проверено</dt><dd id="stat-reviewed">—</dd></div>
+          <div><dt>Средний балл</dt><dd id="stat-average">—</dd></div>
+        </dl>
+        <section class="recent-panel home-view" aria-labelledby="recent-title">
+          <header><div><h2 id="recent-title">Диалоги набора</h2><p id="dashboard-note" class="meta" role="status">Загружаем сохранённые оценки…</p></div><a class="action" href="#workspace">Все диалоги →</a></header>
+          <div id="recent-dialogues"></div>
+        </section>
+        <div id="batch-status" class="batch-status" hidden>
+          <progress id="batch-progress" value="0" max="1" aria-label="Прогресс оценки набора"></progress>
+          <span id="batch-text" role="status"></span>
+          <button type="button" class="action" id="stop-batch" hidden>Остановить</button>
         </div>
+        <section id="workspace" class="workbench" hidden aria-labelledby="workspace-title">
+        <div class="workspace-title"><div><div class="eyebrow">РАБОЧАЯ ОБЛАСТЬ</div><h1 id="workspace-title">Разбор диалогов</h1></div><a class="action" href="#overview">← К обзору</a></div>
         <div class="toolbar">
           <label for="checklist-picker">Чек-лист</label>
           <select id="checklist-picker" disabled><option value="">Загрузка…</option></select>
           <button class="action" type="button" id="open-editor" disabled>Редактировать</button>
           <label class="review-toggle"><input type="checkbox" id="reviewer"> Режим проверяющего</label>
         </div>
-        <div id="batch-status" class="batch-status" hidden>
-          <progress id="batch-progress" value="0" max="1" aria-label="Прогресс оценки набора"></progress>
-          <span id="batch-text" role="status"></span>
-          <button type="button" class="action" id="stop-batch" hidden>Остановить</button>
-        </div>
         <div class="workspace">
+          <aside class="conversation-browser" aria-label="Список диалогов">      <div class="sidebar-head"><h2 id="dialogues-title">Диалоги</h2><span id="count" class="count" hidden></span></div>
+      <div id="filters" class="filters" hidden>
+        <label class="search">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+          <input id="search" type="search" placeholder="Найти диалог" aria-label="Поиск по ID или тексту диалога">
+        </label>
+        <div class="selects">
+          <select id="channel" hidden aria-label="Тип диалога"><option value="">Все типы</option><option value="agent chat">Чаты</option><option value="voice call">Звонки</option></select>
+          <select id="language" hidden aria-label="Язык диалога"><option value="">Все языки</option><option value="RU">RU</option><option value="KZ">KZ</option><option value="EN">EN</option></select>
+          <div class="segmented channel-control" role="group" aria-label="Тип диалога">
+            <button type="button" data-channel="" aria-pressed="true">Все</button>
+            <button type="button" data-channel="agent chat" aria-pressed="false">Чаты</button>
+            <button type="button" data-channel="voice call" aria-pressed="false">Звонки</button>
+          </div>
+          <div class="language-control">
+            <button type="button" id="language-trigger" class="language-trigger" aria-expanded="false" aria-controls="language-options"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><ellipse cx="12" cy="12" rx="3.5" ry="8"/><path d="M4 12h16"/></svg><span id="language-label">Все языки</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button>
+            <div id="language-options" class="language-options" role="group" aria-label="Язык диалога" hidden>
+              <button type="button" data-language="" aria-pressed="true">Все языки</button>
+              <button type="button" data-language="RU" aria-pressed="false">Русский <small>RU</small></button>
+              <button type="button" data-language="KZ" aria-pressed="false">Қазақша <small>KZ</small></button>
+              <button type="button" data-language="EN" aria-pressed="false">English <small>EN</small></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <label class="gross-filter"><input id="gross-only" type="checkbox" disabled> Только грубые ошибки</label>
+      <p id="list-status" class="status" role="status">Загружаем диалоги…</p>
+      <button type="button" id="retry" class="action" hidden>Повторить загрузку</button>
+      <ul id="dialogues" class="dialogues"></ul>
+</aside>
           <section class="panel transcript-panel" aria-labelledby="transcript-title">
             <div class="panel-heading">
               <div><h2 id="transcript-title">Транскрипт</h2><p id="conversation-meta" class="meta"></p></div>
@@ -69,14 +109,18 @@
           <section class="panel" aria-labelledby="evaluation-title">
             <div class="panel-heading">
               <div><h2 id="evaluation-title">Оценка качества</h2><p class="meta">Баллы и доказательства</p></div>
-              <button type="button" id="run-single" class="action" disabled>Оценить</button>
-              <svg class="panel-icon" hidden aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 10l1 1 2-2m1 1h3m-7 6 1 1 2-2m1 1h3"/></svg>
+              <div class="evaluation-actions">
+                <button type="button" id="run-single" class="action" disabled>Оценить</button>
+                <button type="button" id="rerun-single" class="action" disabled>Перезапустить</button>
+              </div>
+               
             </div>
             <p id="evaluation-status" class="status" role="status">Выберите диалог.</p>
             <div id="evaluation" class="evaluation"></div>
             <section id="appeals" class="appeals" aria-label="Апелляции" hidden></section>
           </section>
         </div>
+        </section>
       </div>
     </main>
   </div>
