@@ -38,15 +38,17 @@ test('listChecklists returns array with default checklist', () => {
 
 test('saveChecklist increments version', () => {
   const base = getChecklist('default')!;
-  const testChecklist = { ...base, id: 'test-checklist', version: 1 };
-  const first = saveChecklist(testChecklist);
-  assert.equal(first.version, 1);
-  const second = saveChecklist(first);
-  assert.equal(second.version, 2);
-
   const testFile = path.resolve(process.cwd(), 'data/checklists/test-checklist.json');
-  if (fs.existsSync(testFile)) {
-    fs.unlinkSync(testFile);
+  try {
+    const testChecklist = { ...base, id: 'test-checklist', version: 1 };
+    const first = saveChecklist(testChecklist);
+    assert.equal(first.version, 1);
+    const second = saveChecklist(first);
+    assert.equal(second.version, 2);
+  } finally {
+    if (fs.existsSync(testFile)) {
+      fs.unlinkSync(testFile);
+    }
   }
 });
 

@@ -155,19 +155,19 @@ app.get('/api/evaluations/by-conversation/:conversation_id', (req: Request, res:
 });
 
 app.post('/api/evaluate', async (req: Request, res: Response) => {
-  const { conversation_id, checklist_id = 'default', force } = req.body || {};
+  const { conversation_id, checklist_id = 'cqa-full', force } = req.body || {};
   if (!conversation_id) {
     return res.status(400).json({ error: 'conversation_id is required' });
   }
 
-  const checklist = getChecklist(checklist_id);
+  const checklist = getChecklist(checklist_id) || getChecklist('default');
   if (!checklist) {
     return res.status(404).json({ error: `Checklist '${checklist_id}' not found` });
   }
 
   if (!force) {
-    const cached = getEvaluationByConversation(conversation_id);
-    if (cached && cached.checklist_id === checklist.id && cached.checklist_version === checklist.version) {
+    const cached = getEvaluationByConversation(conversation_id, checklist.id, Number(checklist.version));
+    if (cached) {
       return res.json(cached);
     }
   }
@@ -211,8 +211,11 @@ app.post('/api/evaluate', async (req: Request, res: Response) => {
           checked_range: it.checked_range ?? undefined,
           reason: it.reason,
           na_reason: it.na_reason,
+          raw_points: scored?.raw_points,
           points: scored?.points,
           weight: scored?.weight,
+          effective_weight: scored?.max_points,
+          max_points: scored?.max_points,
           needs_review: it.needs_review || Boolean(flagMsg),
           review_reason: it.review_reason || flagMsg || null,
         };
@@ -321,8 +324,11 @@ app.post('/api/appeals/:id/decide', (req: Request, res: Response) => {
             for (const scored of scoreResult.items) {
               const targetItem = evaluation.items.find((it) => it.criterion_id === scored.criterion_id);
               if (targetItem) {
+                targetItem.raw_points = scored.raw_points;
                 targetItem.points = scored.points;
                 targetItem.weight = scored.weight;
+                targetItem.effective_weight = scored.max_points;
+                targetItem.max_points = scored.max_points;
               }
             }
           } catch {

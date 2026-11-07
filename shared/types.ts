@@ -51,8 +51,11 @@ export interface EvaluationCriterionResult {
   checked_range?: [number, number];
   reason: string;
   na_reason?: string | null;
+  raw_points?: number;
   points?: number;
   weight?: number;
+  effective_weight?: number;
+  max_points?: number;
   needs_review?: boolean;
   review_reason?: string | null;
 }

@@ -102,14 +102,46 @@ export function getEvaluation(id: string): EvaluationResult | null {
   return evals.find((e) => e.id === id) || null;
 }
 
-export function getEvaluationByConversation(conversationId: string): EvaluationResult | null {
+function findLastItem<T>(arr: T[], predicate: (item: T) => boolean): T | null {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (predicate(arr[i])) return arr[i];
+  }
+  return null;
+}
+
+export function getEvaluationByConversation(
+  conversationId: string,
+  checklistId?: string,
+  checklistVersion?: number,
+): EvaluationResult | null {
   const evals = listEvaluations();
-  return evals.find((e) => e.conversation_id === conversationId) || null;
+  if (checklistId !== undefined && checklistVersion !== undefined) {
+    return findLastItem(
+      evals,
+      (e) =>
+        e.conversation_id === conversationId &&
+        e.checklist_id === checklistId &&
+        Number(e.checklist_version) === Number(checklistVersion),
+    );
+  }
+  if (checklistId !== undefined) {
+    return findLastItem(
+      evals,
+      (e) => e.conversation_id === conversationId && e.checklist_id === checklistId,
+    );
+  }
+  return findLastItem(evals, (e) => e.conversation_id === conversationId);
 }
 
 export function saveEvaluation(evaluation: EvaluationResult): EvaluationResult {
   const evals = listEvaluations();
-  const index = evals.findIndex((e) => e.id === evaluation.id);
+  const index = evals.findIndex(
+    (e) =>
+      e.id === evaluation.id ||
+      (e.conversation_id === evaluation.conversation_id &&
+        e.checklist_id === evaluation.checklist_id &&
+        Number(e.checklist_version) === Number(evaluation.checklist_version)),
+  );
   if (index >= 0) {
     evals[index] = evaluation;
   } else {
