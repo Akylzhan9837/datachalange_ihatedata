@@ -9,3 +9,4 @@ GEMINI.md
 *.pdf
 !inputs/*.pdf
 dev_dataset.json
+MASTER_PROMPT*.md

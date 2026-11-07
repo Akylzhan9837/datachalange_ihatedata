@@ -19,7 +19,7 @@
 
 | Роль | Кто | Свои файлы |
 |---|---|---|
-| ТЛ — тимлид + LLM | Арлан | `server/evaluate.ts`, `server/llm.ts`, `prompts/`, `MASTER_PROMPT*.md`, `RULES.md` |
+| ТЛ — тимлид + LLM | Арлан | `server/evaluate.ts`, `server/llm.ts`, `server/results.ts`, `prompts/`, `scripts/export-results.ts`, `RULES.md` |
 | Б1 — бэкенд «данные и процессы» | ____ | `server/index.ts`, `server/store.ts`, `README.md` |
 | Б2 — бэкенд «точность» | ____ | `shared/scoring.ts`, `data/gt/`, `scripts/eval.ts`, `server/rules.ts` |
 | Ф — фронтенд | ____ | `web/` |
