@@ -10,6 +10,8 @@ export interface Criterion {
   type: CriterionType;
   /** Ступени шкалы (для type = 'scale'). Верхняя ступень даёт полный вес. */
   steps?: number[];
+  /** Необязательно; по умолчанию максимум из steps. */
+  max_step?: number;
   na_allowed: boolean;
   na_condition?: string;
   weight: number;
@@ -22,14 +24,17 @@ export interface Checklist {
   id: string;
   version: number | string;
   title?: string;
-  sections?: { id: string; title: string }[];
+  /** Секции: строки-названия (как в data/checklists) или { id, title }. criterion.section ссылается на id/название. */
+  sections?: (string | { id: string; title: string })[];
   criteria: Criterion[];
 }
 
 /** Ответ по одному критерию. Для шкалы достаточно step; answer = 'na' даёт N/A. */
 export interface CriterionAnswer {
   criterion_id: string;
-  answer?: string | null;
+  /** 'yes' | 'no' | 'na' или число-ступень для шкалы (как отдаёт модель). */
+  answer?: string | number | null;
+  /** Необязательно: ступень можно передать и здесь. */
   step?: number | null;
 }
 
@@ -42,8 +47,8 @@ export interface ScoredItem {
   raw_points: number;
   /** Баллы после перераспределения (в сумме дают итог). */
   points: number;
-  /** Максимум после перераспределения (в сумме 100). */
-  max_points: number;
+  /** Вес после перераспределения N/A (в сумме 100). Показывать как «points из effective_weight». */
+  effective_weight: number;
 }
 
 export interface ScoredSection {
@@ -74,6 +79,14 @@ export function round2(x: number): number {
 }
 
 export const isNA = (a: CriterionAnswer): boolean => String(a.answer ?? '').toLowerCase() === 'na';
+
+/** Ступень шкалы: из step или из числового answer (число или строка из цифр). */
+export function stepOf(a: CriterionAnswer): number | null {
+  if (typeof a.step === 'number') return a.step;
+  if (typeof a.answer === 'number') return a.answer;
+  if (typeof a.answer === 'string' && /^\d+$/.test(a.answer.trim())) return Number(a.answer);
+  return null;
+}
 
 /** Проверка чек-листа: уникальные id, неотрицательные веса, шкалы. */
 export function validateChecklist(checklist: Checklist): string[] {
@@ -113,8 +126,9 @@ export function validateAnswers(checklist: Checklist, answers: CriterionAnswer[]
       continue;
     }
     if (c.type === 'scale') {
-      if (typeof a.step !== 'number' || !(c.steps ?? []).includes(a.step)) {
-        problems.push(`критерий ${c.id}: ступень ${String(a.step)} не из шкалы [${(c.steps ?? []).join(', ')}]`);
+      const st = stepOf(a);
+      if (st === null || !(c.steps ?? []).includes(st)) {
+        problems.push(`критерий ${c.id}: ступень ${String(st)} не из шкалы [${(c.steps ?? []).join(', ')}]`);
       }
     } else {
       const v = String(a.answer ?? '').toLowerCase();
@@ -127,8 +141,8 @@ export function validateAnswers(checklist: Checklist, answers: CriterionAnswer[]
 /** Баллы критерия до перераспределения. Предполагает уже проверенный ответ. */
 function rawPoints(c: Criterion, a: CriterionAnswer): number {
   if (c.type === 'scale') {
-    const max = Math.max(...(c.steps as number[]));
-    return (c.weight * (a.step as number)) / max;
+    const max = c.max_step ?? Math.max(...(c.steps as number[]));
+    return (c.weight * (stepOf(a) as number)) / max;
   }
   return String(a.answer).toLowerCase() === 'yes' ? c.weight : 0;
 }
@@ -161,14 +175,14 @@ export function computeScore(checklist: Checklist, answers: CriterionAnswer[]): 
       applicable: ok,
       raw_points: round2(raw),
       points: round2(raw * k),
-      max_points: round2(ok ? c.weight * k : 0),
+      effective_weight: round2(ok ? c.weight * k : 0),
     };
   });
 
   const rawExact = (c: Criterion) => (applicable(c) ? rawPoints(c, byId.get(c.id) as CriterionAnswer) : 0);
   const total = weightSum > 0 ? round2((scoring.reduce((s, c) => s + rawExact(c), 0) / weightSum) * 100) : null;
 
-  const sectionDefs = checklist.sections ?? [];
+  const sectionDefs = (checklist.sections ?? []).map((x) => (typeof x === 'string' ? { id: x, title: x } : x));
   const sections: ScoredSection[] = sectionDefs
     .map((s) => {
       const inSection = scoring.filter((c) => c.section === s.id);
