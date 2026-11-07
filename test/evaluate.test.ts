@@ -9,6 +9,7 @@ import {
   evaluateConversation,
   renderTranscript,
   EvaluationError,
+  PROMPT_VERSION,
   type EvalChecklist,
 } from '../server/evaluate.js';
 import { geminiCall, parseResponse, type LlmCall, type LlmRequest } from '../server/llm.js';
@@ -105,7 +106,7 @@ test('valid answer → items with numeric steps, one call', async () => {
   assert.equal(r.items.find((i) => i.criterion_id === '06')!.answer, 10);
   assert.equal(r.items.every((i) => !i.needs_review), true);
   assert.equal(r.checklist_version, cl.version);
-  assert.equal(r.prompt_version, 'v0');
+  assert.equal(r.prompt_version, PROMPT_VERSION);
 });
 
 test('forbidden N/A → retry with the error text → success', async () => {

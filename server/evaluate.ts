@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { Checklist, ChecklistCriterion, Conversation } from '../shared/types.js';
 import type { LlmCall, LlmUsage } from './llm.js';
 
-export const PROMPT_VERSION = 'v0';
+export const PROMPT_VERSION = 'v1';
 
 export interface EvalCriterion extends ChecklistCriterion {
   na_condition?: string;
