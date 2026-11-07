@@ -5,8 +5,8 @@
 //   npm run gt -- stub p1-ru-001       заготовка записи для data/gt/dev_gt.json
 //   npm run gt -- check                проверка файла эталона и прогресс по целям T+5 (10) и T+9 (20)
 import { existsSync } from 'node:fs';
-import { analyzeTranscript, type ClosingKind } from '../server/rules.ts';
-import { loadChecklist, loadDataset, readJson, toToken, type Dialog, type GtFile } from './lib.ts';
+import { analyzeTranscript, type ClosingKind } from '../server/rules.js';
+import { loadChecklist, loadDataset, readJson, toToken, type Dialog, type GtFile } from './lib.js';
 
 const GT = 'data/gt/dev_gt.json', SET = 'data/sets/DEV.json', CL = 'data/checklists/default.json';
 const [cmd, arg, ...rest] = process.argv.slice(2);

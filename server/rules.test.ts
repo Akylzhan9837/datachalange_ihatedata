@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { analyzeTranscript, crossCheck, type Utterance } from './rules.ts';
+import { analyzeTranscript, crossCheck, type Utterance } from './rules.js';
 
 const u = (speaker: Utterance['speaker'], text: string): Utterance => ({ timestamp: '00:00', speaker, text });
 

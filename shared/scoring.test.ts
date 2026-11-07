@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { computeScore, round2, ScoringError, validateAnswers, type Checklist, type CriterionAnswer } from './scoring.ts';
+import { computeScore, round2, ScoringError, validateAnswers, type Checklist, type CriterionAnswer } from './scoring.js';
 
 const cl = JSON.parse(readFileSync(new URL('./scoring.fixture.json', import.meta.url), 'utf8')) as Checklist;
 const base: CriterionAnswer[] = [
@@ -49,6 +49,7 @@ test('после перераспределения «баллы из effective_
   assert.equal(i04.points, 26.67);
   assert.equal(i04.effective_weight, 26.67);
   assert.equal(i04.weight, 20);
+  assert.equal(i04.max_points, i04.effective_weight); // старое имя пока живо для server/index.ts
 });
 test('нет применимых критериев → null', () => {
   const small: Checklist = { id: 'x', version: 1, criteria: [{ id: 'a', title: 'a', type: 'binary', weight: 10, na_allowed: true }] };

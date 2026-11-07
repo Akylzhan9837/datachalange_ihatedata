@@ -49,6 +49,8 @@ export interface ScoredItem {
   points: number;
   /** Вес после перераспределения N/A (в сумме 100). Показывать как «points из effective_weight». */
   effective_weight: number;
+  /** Устарело: то же, что effective_weight. Оставлено, пока server/index.ts не перешёл на новое имя. */
+  max_points: number;
 }
 
 export interface ScoredSection {
@@ -176,6 +178,7 @@ export function computeScore(checklist: Checklist, answers: CriterionAnswer[]): 
       raw_points: round2(raw),
       points: round2(raw * k),
       effective_weight: round2(ok ? c.weight * k : 0),
+      max_points: round2(ok ? c.weight * k : 0),
     };
   });
 
