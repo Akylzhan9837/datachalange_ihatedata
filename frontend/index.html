@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Контроль качества · CQA</title>
+  <link rel="stylesheet" href="./css/styles.css">
+  <script type="module" src="./js/app.js"></script>
+</head>
+<body>
+  <div class="atmosphere" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div class="shell">
+    <aside class="sidebar" aria-labelledby="dialogues-title">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v12H9l-6 4z"/><path d="m8 11 3 3 5-5"/></svg></span>
+        <div><strong>Контроль качества</strong><small>FREEDOM BROKER / CQA</small></div>
+      </div>
+      <div class="sidebar-head"><h2 id="dialogues-title">Диалоги</h2><span id="count" class="count" hidden></span></div>
+      <div id="filters" class="filters" hidden>
+        <label class="search">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+          <input id="search" type="search" placeholder="Найти диалог" aria-label="Поиск по ID или тексту диалога">
+        </label>
+        <div class="selects">
+          <select id="channel" aria-label="Тип диалога"><option value="">Все типы</option><option value="agent chat">Чаты</option><option value="voice call">Звонки</option></select>
+          <select id="language" aria-label="Язык диалога"><option value="">Все языки</option><option value="RU">RU</option><option value="KZ">KZ</option><option value="EN">EN</option></select>
+        </div>
+      </div>
+      <p id="list-status" class="status" role="status">Загружаем диалоги…</p>
+      <button type="button" id="retry" class="action" hidden>Повторить загрузку</button>
+      <ul id="dialogues" class="dialogues"></ul>
+      <form id="dataset-form" class="sidebar-foot">
+        <label for="group">Набор данных</label>
+        <div><input id="group" value="DEV" required pattern="[A-Za-z0-9_\-]{1,64}" aria-label="ID набора"><button class="action" type="submit" aria-label="Открыть набор">↗</button></div>
+      </form>
+    </aside>
+    <main>
+      <header class="topbar"><span>Контроль качества <span class="divider">/</span> Диалоги</span><span class="dataset"><span class="dot"></span><span id="group-label">DEV</span></span></header>
+      <div class="content">
+        <div class="intro">
+          <div class="intro-copy">
+            <div class="eyebrow"><span></span> CONVERSATION QUALITY</div>
+            <h1>Анализ диалогов<span>.</span></h1>
+            <p>Транскрипты, критерии и решения по апелляциям.</p>
+          </div>
+          <button type="button" id="run-batch" class="primary" disabled><span aria-hidden="true">▸</span> Оценить весь набор</button>
+        </div>
+        <div class="toolbar">
+          <label for="checklist-picker">Чек-лист</label>
+          <select id="checklist-picker" disabled><option value="">Загрузка…</option></select>
+          <button class="action" type="button" id="open-editor" disabled>Редактировать</button>
+          <label class="review-toggle"><input type="checkbox" id="reviewer"> Режим проверяющего</label>
+        </div>
+        <div id="batch-status" class="batch-status" hidden>
+          <progress id="batch-progress" value="0" max="1" aria-label="Прогресс оценки набора"></progress>
+          <span id="batch-text" role="status"></span>
+          <button type="button" class="action" id="stop-batch" hidden>Остановить</button>
+        </div>
+        <div class="workspace">
+          <section class="panel transcript-panel" aria-labelledby="transcript-title">
+            <div class="panel-heading">
+              <div><h2 id="transcript-title">Транскрипт</h2><p id="conversation-meta" class="meta"></p></div>
+              <a id="recording" class="action" target="_blank" rel="noopener noreferrer" hidden>Открыть запись ↗</a>
+            </div>
+            <p id="transcript-status" class="status">Выберите диалог.</p>
+            <ol id="transcript" class="transcript" aria-label="Реплики диалога"></ol>
+          </section>
+          <section class="panel" aria-labelledby="evaluation-title">
+            <div class="panel-heading">
+              <div><h2 id="evaluation-title">Оценка качества</h2><p class="meta">Баллы и доказательства</p></div>
+              <button type="button" id="run-single" class="action" disabled>Оценить</button>
+              <svg class="panel-icon" hidden aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 10l1 1 2-2m1 1h3m-7 6 1 1 2-2m1 1h3"/></svg>
+            </div>
+            <p id="evaluation-status" class="status" role="status">Выберите диалог.</p>
+            <div id="evaluation" class="evaluation"></div>
+            <section id="appeals" class="appeals" aria-label="Апелляции" hidden></section>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+  <dialog id="editor" class="modal" aria-labelledby="editor-title">
+    <form id="editor-form">
+      <header class="modal-head">
+        <div><div class="eyebrow">КОНФИГУРАЦИЯ</div><h2 id="editor-title">Редактор критериев</h2><p id="editor-version" class="meta"></p></div>
+        <button type="button" class="action" id="close-editor" aria-label="Закрыть редактор">Закрыть</button>
+      </header>
+      <div id="editor-fields" class="editor-fields"></div>
+      <footer class="modal-footer">
+        <button type="button" id="add-criterion" class="action">+ Критерий</button>
+        <span id="editor-status" class="meta" role="status"></span>
+        <button type="submit" id="save-checklist" class="primary">Сохранить версию</button>
+      </footer>
+    </form>
+  </dialog>
+  <dialog id="appeal-dialog" class="modal compact" aria-labelledby="appeal-title">
+    <form id="appeal-form">
+      <header class="modal-head"><div><h2 id="appeal-title">Подать апелляцию</h2><p id="appeal-criterion" class="meta"></p></div><button type="button" class="action" id="close-appeal">Закрыть</button></header>
+      <div class="editor-fields"><label>Что нужно пересмотреть<textarea id="appeal-comment" rows="4" required></textarea></label><p id="appeal-status" class="meta" role="status"></p></div>
+      <footer class="modal-footer"><button type="submit" id="send-appeal" class="primary">Отправить</button></footer>
+    </form>
+  </dialog>
+</body>
+</html>
