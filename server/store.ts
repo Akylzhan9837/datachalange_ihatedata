@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Checklist, EvaluationResult, Appeal, DatasetResponse } from '../shared/types.js';
+import type { Checklist, EvaluationResult, Appeal, DatasetResponse, Conversation } from '../shared/types.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const CHECKLISTS_DIR = path.join(DATA_DIR, 'checklists');
@@ -77,6 +77,20 @@ export function getDataset(groupId: string): DatasetResponse | null {
 export function saveDataset(groupId: string, data: DatasetResponse): void {
   const filePath = path.join(SETS_DIR, `${groupId}.json`);
   writeJsonFile(filePath, data);
+}
+
+export function getConversation(id: string): Conversation | null {
+  const setsFiles = fs.readdirSync(SETS_DIR).filter((f) => f.endsWith('.json'));
+  for (const file of setsFiles) {
+    const dataset = readJsonFile<DatasetResponse | null>(path.join(SETS_DIR, file), null);
+    if (dataset?.data?.records) {
+      const found = dataset.data.records.find((r) => r.conversation_id === id);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  return null;
 }
 
 export function listEvaluations(): EvaluationResult[] {

@@ -1,0 +1,21 @@
+{
+  "id": "default",
+  "version": 1,
+  "title": "Чек-лист качества чатов (Freedom Broker)",
+  "sections": [
+    { "id": "start", "title": "Начало и понимание запроса" },
+    { "id": "security", "title": "Безопасность и решение" },
+    { "id": "dialog", "title": "Ведение и завершение диалога" },
+    { "id": "gross", "title": "Грубые нарушения" }
+  ],
+  "criteria": [
+    { "id": "01", "section": "start", "title": "Установление контакта", "type": "binary", "weight": 10, "na_allowed": false },
+    { "id": "02", "section": "start", "title": "Выявление потребности", "type": "binary", "weight": 15, "na_allowed": true },
+    { "id": "03", "section": "security", "title": "Идентификация", "type": "binary", "weight": 20, "na_allowed": true },
+    { "id": "04", "section": "security", "title": "Корректная и полная консультация", "type": "scale", "steps": [0, 5, 10, 15, 20], "weight": 20, "na_allowed": true },
+    { "id": "05", "section": "dialog", "title": "Эмпатия и клиентоориентированность", "type": "binary", "weight": 15, "na_allowed": false },
+    { "id": "06", "section": "dialog", "title": "Управление диалогом, скорость и грамотность", "type": "scale", "steps": [0, 4, 7, 10], "weight": 15, "na_allowed": false },
+    { "id": "07", "section": "dialog", "title": "Завершение", "type": "binary", "weight": 5, "na_allowed": true },
+    { "id": "08", "section": "gross", "title": "Грубые ошибки", "type": "binary", "weight": 0, "na_allowed": false, "is_gross": true }
+  ]
+}

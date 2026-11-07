@@ -53,6 +53,15 @@ export interface EvaluationCriterionResult {
   na_reason?: string | null;
   points?: number;
   weight?: number;
+  needs_review?: boolean;
+  review_reason?: string | null;
+}
+
+export interface RuleFlag {
+  criterion_id: string;
+  rule: string;
+  message: string;
+  index: number | null;
 }
 
 export interface EvaluationResult {
@@ -67,6 +76,7 @@ export interface EvaluationResult {
   total_score: number | null;
   section_scores: Record<string, number | null>;
   gross_violation: boolean;
+  rule_flags?: RuleFlag[];
 }
 
 export interface Appeal {
