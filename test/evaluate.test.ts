@@ -6,6 +6,7 @@ import {
   buildPrompt,
   buildSchema,
   checkAnswer,
+  checklistProblems,
   evaluateConversation,
   renderTranscript,
   EvaluationError,
@@ -107,6 +108,7 @@ test('valid answer → items with numeric steps, one call', async () => {
   assert.equal(r.items.every((i) => !i.needs_review), true);
   assert.equal(r.checklist_version, cl.version);
   assert.equal(r.prompt_version, PROMPT_VERSION);
+  assert.equal(r.votes, 1);
 });
 
 test('forbidden N/A → retry with the error text → success', async () => {
@@ -150,33 +152,121 @@ test('Gemini response parsing: text without thoughts, usage, block reasons', () 
   assert.throws(() => parseResponse({ candidates: [{ finishReason: 'MAX_TOKENS' }] }, 'm'), /MAX_TOKENS/);
 });
 
-test('Gemini: 503 and 429 move to the next model, 400 stops at once', async () => {
+const req: LlmRequest = { system: 's', user: 'u', schema: {} };
+const ok = () => new Response(JSON.stringify({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '{}' }] } }] }), { status: 200 });
+const fail = (status: number, retryDelay?: string) => new Response(
+  JSON.stringify({ error: { code: status, details: retryDelay ? [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay }] : [] } }),
+  { status },
+);
+
+function mockFetch(handler: (model: string) => Response) {
   const realFetch = globalThis.fetch;
-  const seen: string[] = [];
-  const reply = (status: number) => new Response(
-    status === 200 ? JSON.stringify({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '{}' }] } }] }) : '{"error":{}}',
-    { status },
-  );
+  const calls: { model: string; url: string; init: RequestInit }[] = [];
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    const model = url.split('/models/')[1].split(':')[0];
+    calls.push({ model, url, init });
+    return handler(model);
+  }) as typeof fetch;
+  return { calls, restore: () => { globalThis.fetch = realFetch; } };
+}
+
+test('Gemini: key only in a header; temperature and thinking set per model generation', async () => {
+  const m = mockFetch(() => ok());
   try {
-    const plan: Record<string, number> = { a: 503, b: 429, c: 200 };
-    globalThis.fetch = (async (url: string) => {
-      const m = url.split('/models/')[1].split(':')[0];
-      seen.push(m);
-      return reply(plan[m]);
-    }) as typeof fetch;
-    const r = await geminiCall({ apiKey: 'k', model: 'a, b ,c', maxAttempts: 1 })({ system: 's', user: 'u', schema: {} });
-    assert.equal(r.model, 'c');
-    assert.deepEqual(seen, ['a', 'b', 'c']);
-
-    plan.a = 400;
-    seen.length = 0;
-    await assert.rejects(geminiCall({ apiKey: 'k', model: 'a,c', maxAttempts: 1 })({ system: 's', user: 'u', schema: {} }), /a HTTP 400/);
-    assert.deepEqual(seen, ['a']);
-
-    plan.a = 503;
-    plan.c = 503;
-    await assert.rejects(geminiCall({ apiKey: 'k', model: 'a,c', maxAttempts: 1 })({ system: 's', user: 'u', schema: {} }), /a HTTP 503; c HTTP 503/);
+    await geminiCall({ apiKey: 'SECRET', model: 'gemini-3.5-flash', thinkingLevel: 'high' })(req);
+    await geminiCall({ apiKey: 'SECRET', model: 'gemini-2.5-flash', thinkingLevel: 'high' })(req);
   } finally {
-    globalThis.fetch = realFetch;
+    m.restore();
   }
+  for (const c of m.calls) {
+    assert.ok(!c.url.includes('SECRET'));
+    assert.equal((c.init.headers as Record<string, string>)['x-goog-api-key'], 'SECRET');
+  }
+  const [g3, g2] = m.calls.map((c) => JSON.parse(String(c.init.body)).generationConfig);
+  assert.equal(g3.temperature, undefined);
+  assert.deepEqual(g3.thinkingConfig, { thinkingLevel: 'high' });
+  assert.equal(g2.temperature, 0);
+  assert.equal(g2.thinkingConfig, undefined);
+});
+
+test('Gemini: 503, 429 and network errors move to the next model, 400 stops at once', async () => {
+  const plan: Record<string, () => Response> = { a: () => fail(503), b: () => fail(429, '80413s'), c: () => ok() };
+  const m = mockFetch((model) => plan[model]());
+  try {
+    const r = await geminiCall({ apiKey: 'k', model: 'a, b ,c', maxAttempts: 1 })(req);
+    assert.equal(r.model, 'c');
+    assert.deepEqual(m.calls.map((c) => c.model), ['a', 'b', 'c']);
+
+    m.calls.length = 0;
+    plan.a = () => fail(400);
+    await assert.rejects(geminiCall({ apiKey: 'k', model: 'a,c', maxAttempts: 1 })(req), /a HTTP 400/);
+    assert.deepEqual(m.calls.map((c) => c.model), ['a']);
+
+    plan.a = () => { throw new TypeError('fetch failed'); };
+    plan.c = () => fail(503);
+    await assert.rejects(geminiCall({ apiKey: 'k', model: 'a,c', maxAttempts: 1 })(req), /a network: fetch failed; c HTTP 503/);
+  } finally {
+    m.restore();
+  }
+});
+
+test('Gemini 429: short retryDelay → same model again, daily limit → next model at once', async () => {
+  let first = true;
+  const plan: Record<string, () => Response> = {
+    a: () => (first ? ((first = false), fail(429, '0s')) : ok()),
+    b: () => ok(),
+  };
+  const m = mockFetch((model) => plan[model]());
+  try {
+    await geminiCall({ apiKey: 'k', model: 'a,b', maxAttempts: 3 })(req);
+    assert.deepEqual(m.calls.map((c) => c.model), ['a', 'a']);
+
+    m.calls.length = 0;
+    plan.a = () => fail(429, '80413s');
+    await geminiCall({ apiKey: 'k', model: 'a,b', maxAttempts: 3 })(req);
+    assert.deepEqual(m.calls.map((c) => c.model), ['a', 'b']);
+  } finally {
+    m.restore();
+  }
+});
+
+test('broken checklist fails before any model call', async () => {
+  assert.deepEqual(checklistProblems(cl), []);
+  const llm = fake(good);
+  const dup: EvalChecklist = { ...cl, criteria: [...cl.criteria, cl.criteria[0]] };
+  await assert.rejects(evaluateConversation(chat, dup, llm), /01: id повторяется/);
+  const noSteps: EvalChecklist = { ...cl, criteria: cl.criteria.map((k) => (k.id === '04' ? { ...k, steps: undefined } : k)) };
+  await assert.rejects(evaluateConversation(chat, noSteps, llm), /04: у шкалы/);
+  await assert.rejects(evaluateConversation(chat, { ...cl, criteria: [] }, llm), /нет критериев/);
+  assert.equal(llm.calls.length, 0);
+});
+
+test('binary criteria never add scale steps to the answer enum', () => {
+  const odd: EvalChecklist = { ...cl, criteria: cl.criteria.map((k) => (k.id === '01' ? { ...k, steps: [1, 2] } : k)) };
+  const answers: string[] = (buildSchema(odd) as any).properties.items.items.properties.answer.enum;
+  assert.ok(!answers.includes('1') && !answers.includes('2'));
+});
+
+test('answer wrapped in a ```json fence is accepted, evidence is cleaned', () => {
+  const messy = { items: good.items.map((i) => (i.criterion_id === '04' ? { ...i, evidence: [4, 3, 3, 99] } : i)) };
+  const { items, hard } = checkAnswer(cl, chat, '```json\n' + JSON.stringify(messy) + '\n```');
+  assert.deepEqual(hard, []);
+  const k04 = items.find((i) => i.criterion_id === '04')!;
+  assert.deepEqual(k04.evidence, [3, 4]);
+  assert.match(k04.review_reason!, /вне диапазона 1–5: 99/);
+});
+
+test('votes: majority wins, disagreement is flagged, scale tie takes the median', async () => {
+  const flip = (id: string, answer: string) => ({ items: good.items.map((i) => (i.criterion_id === id ? { ...i, answer } : i)) });
+  const r = await evaluateConversation(chat, cl, fake(good, flip('05', 'no'), good), 3);
+  assert.equal(r.votes, 3);
+  assert.equal(r.usage.calls, 3);
+  const k05 = r.items.find((i) => i.criterion_id === '05')!;
+  assert.equal(k05.answer, 'yes');
+  assert.equal(k05.needs_review, true);
+  assert.match(k05.review_reason!, /прогоны разошлись: yes×2, no×1/);
+  assert.equal(r.items.find((i) => i.criterion_id === '01')!.needs_review, false);
+
+  const s = await evaluateConversation(chat, cl, fake(flip('04', '5'), flip('04', '20'), flip('04', '10')), 3);
+  assert.equal(s.items.find((i) => i.criterion_id === '04')!.answer, 10);
 });

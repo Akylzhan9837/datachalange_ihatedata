@@ -38,9 +38,10 @@ for (const id of ids) {
   }
   try {
     const r = await evaluateConversation(conv, cl, llm);
+    const votes = r.votes > 1 ? ` · голосов ${r.votes}` : '';
     const file = path.join(outDir, `${id}.${Date.now()}.json`);
     fs.writeFileSync(file, JSON.stringify(r, null, 2));
-    console.log(`\n${id} · ${r.model} · вызовов ${r.usage.calls} · токены ${r.usage.input_tokens}/${r.usage.output_tokens} · ${r.duration_ms} мс`);
+    console.log(`\n${id} · ${r.model} · вызовов ${r.usage.calls}${votes} · токены ${r.usage.input_tokens}/${r.usage.output_tokens} · ${r.duration_ms} мс`);
     for (const i of r.items) {
       const ev = i.evidence.map((n) => `#${n}`).join(',') || '—';
       const rng = i.checked_range ? ` [#${i.checked_range[0]}–#${i.checked_range[1]}]` : '';
