@@ -5,8 +5,8 @@
 //   npm run gt -- stub p1-ru-001       заготовка записи для data/gt/dev_gt.json
 //   npm run gt -- check                проверка файла эталона и прогресс по целям T+5 (10) и T+9 (20)
 import { existsSync } from 'node:fs';
-import { analyzeTranscript, type ClosingKind } from '../server/rules.ts';
-import { loadChecklist, loadDataset, readJson, toToken, type Dialog, type GtFile } from './lib.ts';
+import { analyzeTranscript, type ClosingKind } from '../server/rules.js';
+import { loadChecklist, loadDataset, readJson, toToken, type Dialog, type GtFile } from './lib.js';
 
 const GT = 'data/gt/dev_gt.json', SET = 'data/sets/DEV.json', CL = 'data/checklists/default.json';
 const [cmd, arg, ...rest] = process.argv.slice(2);
@@ -37,12 +37,13 @@ function plan(): string[] {
     const out: string[] = []; for (let i = 0; Object.values(g).some((a) => i < a.length); i++) for (const a of Object.values(g)) if (a[i]) out.push(a[i]);
     return out;
   };
-  add(info.filter((x) => x.d.channel === 'voice call').map((x) => x.d.conversation_id), 5); // все звонки
+  // Сначала чаты (так просил ТЛ), звонки в конце: они длинные и тяжёлые для разметки.
   add(interleave(byKind('operator_closed')), 4); // чат закрыл оператор: «Завершение», возможные грубые ошибки
   add(interleave([...byKind('client_left'), ...byKind('connection_lost')]), 4); // оборванные: N/A у 04 и 07
   add(interleave(chats.filter((x) => x.h.identityVerified.found).map((x) => x.d.conversation_id)), 3); // идентификация
   add(interleave(chats.filter((x) => !x.h.greeting.found || !x.h.introduction).map((x) => x.d.conversation_id)), 3); // 01
-  add(chats.sort((a, b) => b.d.transcript.length - a.d.transcript.length).map((x) => x.d.conversation_id), 20 - picked.length); // длинные
+  add([...chats].sort((a, b) => b.d.transcript.length - a.d.transcript.length).map((x) => x.d.conversation_id), 15 - picked.length); // длинные
+  add(info.filter((x) => x.d.channel === 'voice call').map((x) => x.d.conversation_id), 5); // все звонки
   return picked.slice(0, 20);
 }
 
@@ -50,7 +51,7 @@ if (cmd === 'list') {
   for (const d of dialogs) console.log(`${gt[d.conversation_id] ? '✔' : ' '} ${d.conversation_id.padEnd(10)} ${d.channel.padEnd(10)} ${d.language} ${String(d.transcript.length).padStart(4)} реплик`);
 } else if (cmd === 'plan') {
   const p = plan();
-  console.log('Порядок разметки (первые 10 — к T+5, все 20 — к T+9). Выбор по структуре диалога, не по оценкам:\n');
+  console.log('Порядок разметки: сначала 15 чатов, затем 5 звонков (10 к T+5, 20 к T+9). Выбор по структуре диалога, не по оценкам:\n');
   p.forEach((id, i) => { const d = dialogs.find((x) => x.conversation_id === id)!; console.log(`${String(i + 1).padStart(2)}. ${gt[id] ? '✔' : ' '} ${id.padEnd(10)} ${d.channel.padEnd(10)} ${d.language}`); });
 } else if (cmd === 'show' && arg) {
   const d = dialogs.find((x) => x.conversation_id === arg);

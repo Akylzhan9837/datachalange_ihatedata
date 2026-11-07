@@ -1,7 +1,7 @@
 // Общие загрузчики для eval.ts и gt.ts (файлы Б2).
 import { existsSync, readFileSync } from 'node:fs';
-import type { Checklist, CriterionAnswer } from '../shared/scoring.ts';
-import type { Utterance } from '../server/rules.ts';
+import type { Checklist, CriterionAnswer } from '../shared/scoring.js';
+import type { Utterance } from '../server/rules.js';
 
 export interface Dialog { conversation_id: string; channel: string; language: string; transcript: Utterance[]; audio_url: string | null }
 /** Эталон: { "<conversation_id>": { "01": "yes", "04": 20, ..., "_note": "..." } } — формат из docs/06. */

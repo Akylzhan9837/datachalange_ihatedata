@@ -4,9 +4,9 @@
 // (допустим и просто массив results; items можно назвать criteria).
 import { parseArgs } from 'node:util';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { computeScore, type Checklist, type Criterion } from '../shared/scoring.ts';
-import { analyzeTranscript, crossCheck } from '../server/rules.ts';
-import { loadChecklist, loadDataset, readJson, toToken, tokenStr, tokenToAnswer, type Dialog, type GtFile, type Token } from './lib.ts';
+import { computeScore, type Checklist, type Criterion } from '../shared/scoring.js';
+import { analyzeTranscript, crossCheck } from '../server/rules.js';
+import { loadChecklist, loadDataset, readJson, toToken, tokenStr, tokenToAnswer, type Dialog, type GtFile, type Token } from './lib.js';
 
 interface ResultItem { criterion_id: string; answer?: string | null; step?: number | null; reason?: string | null; evidence?: number[] }
 interface ResultRow { conversation_id: string; items?: ResultItem[]; criteria?: ResultItem[] }

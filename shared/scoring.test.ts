@@ -27,11 +27,29 @@ test('N/A 03 и 07: вес 75, набранное ×100/75', () => {
   const r = computeScore(cl, with_({ '01': { answer: 'no' }, '03': { answer: 'na' }, '07': { answer: 'na' } }));
   assert.equal(r.total, 86.67);
   assert.equal(r.items.find((i) => i.criterion_id === '03')!.applicable, false);
-  assert.equal(r.items.find((i) => i.criterion_id === '02')!.max_points, 20);
+  assert.equal(r.items.find((i) => i.criterion_id === '02')!.effective_weight, 20);
 });
 test('N/A у шкального критерия 04', () => {
   const r = computeScore(cl, with_({ '04': { answer: 'na', step: null } }));
   assert.equal(r.total, 100);
+});
+test('сверка от ТЛ: 03 = N/A, применимый вес 80, 26 баллов дают 32.50', () => {
+  const r = computeScore(cl, with_({ '02': { answer: 'no' }, '03': { answer: 'na' }, '04': { step: 10 }, '05': { answer: 'no' }, '06': { step: 4 }, '07': { answer: 'no' } }));
+  assert.equal(r.items.reduce((s, i) => s + i.raw_points, 0), 26);
+  assert.equal(r.items.filter((i) => i.applicable).reduce((s, i) => s + i.weight, 0), 80);
+  assert.equal(r.total, 32.5);
+});
+test('модель отдаёт число прямо в answer (шкала) — работает без step', () => {
+  const r = computeScore(cl, base.map((a) => (a.criterion_id === '04' ? { criterion_id: '04', answer: 15 } : a.criterion_id === '06' ? { criterion_id: '06', answer: '7' } : a)));
+  assert.equal(r.total, 90.5);
+});
+test('после перераспределения «баллы из effective_weight» (у 04 было бы 25 при весе 20)', () => {
+  const r = computeScore(cl, with_({ '03': { answer: 'na' }, '07': { answer: 'na' } }));
+  const i04 = r.items.find((i) => i.criterion_id === '04')!;
+  assert.equal(i04.points, 26.67);
+  assert.equal(i04.effective_weight, 26.67);
+  assert.equal(i04.weight, 20);
+  assert.equal(i04.max_points, i04.effective_weight); // старое имя пока живо для server/index.ts
 });
 test('нет применимых критериев → null', () => {
   const small: Checklist = { id: 'x', version: 1, criteria: [{ id: 'a', title: 'a', type: 'binary', weight: 10, na_allowed: true }] };
@@ -71,4 +89,20 @@ test('валидация: N/A не разрешён, ступень вне шк�
   assert.ok(p.some((s) => s.includes('07') && s.includes('нет ответа')));
   assert.ok(p.some((s) => s.includes('99')));
   assert.throws(() => computeScore(cl, [{ criterion_id: '01', answer: 'yes' }]), ScoringError);
+});
+
+test('секции-строки (как в data/checklists/default.json у ТЛ) и max_step', () => {
+  const tl: Checklist = {
+    id: 'default', version: 7, sections: ['Начало', 'Конец', 'Грубые'],
+    criteria: [
+      { id: '01', section: 'Начало', title: 'a', type: 'binary', weight: 10, na_allowed: false },
+      { id: '04', section: 'Начало', title: 'b', type: 'scale', steps: [0, 5, 10, 15, 20], max_step: 20, weight: 20, na_allowed: true },
+      { id: '07', section: 'Конец', title: 'c', type: 'binary', weight: 5, na_allowed: true },
+      { id: '08', section: 'Грубые', title: 'd', type: 'binary', weight: 0, na_allowed: false, is_gross: true },
+    ],
+  };
+  const r = computeScore(tl, [{ criterion_id: '01', answer: 'yes' }, { criterion_id: '04', answer: 10 }, { criterion_id: '07', answer: 'na' }, { criterion_id: '08', answer: 'yes' }]);
+  assert.equal(r.total, 66.67);
+  assert.deepEqual(r.sections.map((x) => [x.id, x.score]), [['Начало', 66.67], ['Конец', null]]);
+  assert.equal(r.gross, true);
 });

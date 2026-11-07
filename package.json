@@ -8,7 +8,10 @@
     "build": "tsc",
     "start": "node dist/server/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/**/*.test.ts"
+    "test": "tsx --test test/**/*.test.ts && npm run test:b2 ",
+    "test:b2": "tsx --test shared/*.test.ts server/*.test.ts",
+    "eval": "tsx scripts/eval.ts",
+    "gt": "tsx scripts/gt.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
