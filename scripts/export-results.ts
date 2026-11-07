@@ -17,10 +17,11 @@ const groupArg = flag('--group');
 const clPath = flag('--checklist') ?? 'data/checklists/cqa-full.json';
 const team = flag('--team') ?? process.env.TEAM_NAME ?? 'ihatedata';
 const force = args.includes('--force');
+const cachedOnly = args.includes('--cached-only');
 const target = args.find((a) => !a.startsWith('--'));
 
 if ((target !== 'dev' && target !== 'prod') || (target === 'prod' && !groupArg) || !team?.trim()) {
-  console.error('npx tsx scripts/export-results.ts dev|prod [--group GROUP_ID] [--team ihatedata] [--checklist file] [--force]');
+  console.error('npx tsx scripts/export-results.ts dev|prod [--group GROUP_ID] [--team ihatedata] [--checklist file] [--force] [--cached-only]');
   console.error('prod требует --group');
   process.exit(1);
 }
@@ -93,6 +94,7 @@ for (const conv of records) {
     let draft = force ? null : cachedDraft(id);
     if (draft) fromCache++;
     else {
+      if (cachedOnly) throw new Error('не оценён: суточная квота Gemini исчерпана, диалог будет оценён после её сброса');
       if (llmDown) throw new Error(`не оценён: ${llmDown}`);
       draft = await evaluateConversation(conv, cl);
       fs.writeFileSync(path.join(cacheDir, `${id}.json`), JSON.stringify(draft, null, 2));
