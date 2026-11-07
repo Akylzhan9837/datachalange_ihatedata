@@ -159,13 +159,13 @@ const fail = (status: number, retryDelay?: string) => new Response(
   { status },
 );
 
-function mockFetch(handler: (model: string) => Response) {
+function mockFetch(handler: (model: string, key: string) => Response) {
   const realFetch = globalThis.fetch;
   const calls: { model: string; url: string; init: RequestInit }[] = [];
   globalThis.fetch = (async (url: string, init: RequestInit) => {
     const model = url.split('/models/')[1].split(':')[0];
     calls.push({ model, url, init });
-    return handler(model);
+    return handler(model, (init.headers as Record<string, string>)['x-goog-api-key']);
   }) as typeof fetch;
   return { calls, restore: () => { globalThis.fetch = realFetch; } };
 }
@@ -225,6 +225,29 @@ test('Gemini 429: short retryDelay → same model again, daily limit → next mo
     plan.a = () => fail(429, '80413s');
     await geminiCall({ apiKey: 'k', model: 'a,b', maxAttempts: 3 })(req);
     assert.deepEqual(m.calls.map((c) => c.model), ['a', 'b']);
+  } finally {
+    m.restore();
+  }
+});
+
+test('several keys: best model on every key first, spent or invalid keys are skipped', async () => {
+  const seen: string[] = [];
+  const m = mockFetch((model, key) => {
+    seen.push(`${model}/${key}`);
+    if (key === 'k1') return fail(429, '80413s');
+    if (key === 'bad') return fail(403);
+    return model === 'a' && key === 'k3' ? ok() : fail(503);
+  });
+  try {
+    const llm = geminiCall({ apiKey: 'k1, bad ,k3', model: 'a,b', maxAttempts: 1 });
+    await llm(req);
+    assert.deepEqual(seen, ['a/k1', 'a/bad', 'a/k3']);
+    seen.length = 0;
+    await llm(req);
+    assert.deepEqual(seen, ['a/k3'], 'исчерпанный и неверный ключи больше не дёргаются');
+    const r = await geminiCall({ apiKey: 'k1,k2', model: 'a', maxAttempts: 1 })(req).catch((e: Error) => e.message);
+    assert.match(String(r), /a key#1 HTTP 429; a key#2 HTTP 503/);
+    assert.doesNotMatch(String(r), /k1|k2/);
   } finally {
     m.restore();
   }
