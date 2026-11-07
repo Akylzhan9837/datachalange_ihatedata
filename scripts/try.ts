@@ -10,13 +10,12 @@ const flag = (name: string) => {
   const i = args.indexOf(name);
   return i >= 0 ? args.splice(i, 2)[1] : undefined;
 };
-const allowCalls = args.includes('--allow-calls');
 const setPath = flag('--set') ?? 'data/sets/DEV.json';
 const clPath = flag('--checklist') ?? 'data/checklists/cqa-full.json';
 const ids = args.filter((a) => !a.startsWith('--'));
 
 if (!ids.length) {
-  console.error('npx tsx scripts/try.ts <conversation_id>... [--set file] [--checklist file] [--allow-calls]');
+  console.error('npx tsx scripts/try.ts <conversation_id>... [--set file] [--checklist file]');
   process.exit(1);
 }
 
@@ -30,10 +29,6 @@ for (const id of ids) {
   const conv = records.find((r) => r.conversation_id === id);
   if (!conv) {
     console.error(`${id}: нет в ${setPath}`);
-    continue;
-  }
-  if (conv.channel !== 'agent chat' && !allowCalls) {
-    console.error(`${id}: это звонок, пропущен (нужен --allow-calls)`);
     continue;
   }
   try {
