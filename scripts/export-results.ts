@@ -14,13 +14,13 @@ const flag = (name: string) => {
 };
 const groupArg = flag('--group');
 const clPath = flag('--checklist') ?? 'data/checklists/cqa-full.json';
-const team = flag('--team') ?? process.env.TEAM_NAME;
+const team = flag('--team') ?? process.env.TEAM_NAME ?? 'ihatedata';
 const force = args.includes('--force');
 const target = args.find((a) => !a.startsWith('--'));
 
 if ((target !== 'dev' && target !== 'prod') || (target === 'prod' && !groupArg) || !team?.trim()) {
-  console.error('npx tsx scripts/export-results.ts dev|prod --team "Команда" [--group GROUP_ID] [--checklist file] [--force]');
-  console.error('prod требует --group; имя команды — --team или TEAM_NAME в .env');
+  console.error('npx tsx scripts/export-results.ts dev|prod [--group GROUP_ID] [--team ihatedata] [--checklist file] [--force]');
+  console.error('prod требует --group');
   process.exit(1);
 }
 const group = groupArg ?? 'DEV';
