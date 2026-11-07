@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Checklist, EvaluationResult, Appeal, DatasetResponse } from '../shared/types.js';
+import type { Checklist, EvaluationResult, Appeal, DatasetResponse, Conversation } from '../shared/types.js';
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const CHECKLISTS_DIR = path.join(DATA_DIR, 'checklists');
@@ -79,6 +79,20 @@ export function saveDataset(groupId: string, data: DatasetResponse): void {
   writeJsonFile(filePath, data);
 }
 
+export function getConversation(id: string): Conversation | null {
+  const setsFiles = fs.readdirSync(SETS_DIR).filter((f) => f.endsWith('.json'));
+  for (const file of setsFiles) {
+    const dataset = readJsonFile<DatasetResponse | null>(path.join(SETS_DIR, file), null);
+    if (dataset?.data?.records) {
+      const found = dataset.data.records.find((r) => r.conversation_id === id);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  return null;
+}
+
 export function listEvaluations(): EvaluationResult[] {
   return readJsonFile<EvaluationResult[]>(EVALUATIONS_FILE, []);
 }
@@ -88,14 +102,46 @@ export function getEvaluation(id: string): EvaluationResult | null {
   return evals.find((e) => e.id === id) || null;
 }
 
-export function getEvaluationByConversation(conversationId: string): EvaluationResult | null {
+function findLastItem<T>(arr: T[], predicate: (item: T) => boolean): T | null {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (predicate(arr[i])) return arr[i];
+  }
+  return null;
+}
+
+export function getEvaluationByConversation(
+  conversationId: string,
+  checklistId?: string,
+  checklistVersion?: number,
+): EvaluationResult | null {
   const evals = listEvaluations();
-  return evals.find((e) => e.conversation_id === conversationId) || null;
+  if (checklistId !== undefined && checklistVersion !== undefined) {
+    return findLastItem(
+      evals,
+      (e) =>
+        e.conversation_id === conversationId &&
+        e.checklist_id === checklistId &&
+        Number(e.checklist_version) === Number(checklistVersion),
+    );
+  }
+  if (checklistId !== undefined) {
+    return findLastItem(
+      evals,
+      (e) => e.conversation_id === conversationId && e.checklist_id === checklistId,
+    );
+  }
+  return findLastItem(evals, (e) => e.conversation_id === conversationId);
 }
 
 export function saveEvaluation(evaluation: EvaluationResult): EvaluationResult {
   const evals = listEvaluations();
-  const index = evals.findIndex((e) => e.id === evaluation.id);
+  const index = evals.findIndex(
+    (e) =>
+      e.id === evaluation.id ||
+      (e.conversation_id === evaluation.conversation_id &&
+        e.checklist_id === evaluation.checklist_id &&
+        Number(e.checklist_version) === Number(evaluation.checklist_version)),
+  );
   if (index >= 0) {
     evals[index] = evaluation;
   } else {

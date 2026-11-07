@@ -188,7 +188,7 @@ export function computeScore(checklist: Checklist, answers: CriterionAnswer[]): 
   const sectionDefs = (checklist.sections ?? []).map((x) => (typeof x === 'string' ? { id: x, title: x } : x));
   const sections: ScoredSection[] = sectionDefs
     .map((s) => {
-      const inSection = scoring.filter((c) => c.section === s.id);
+      const inSection = scoring.filter((c) => c.section === s.id || c.section === s.title);
       const w = inSection.filter(applicable).reduce((sum, c) => sum + c.weight, 0);
       const p = inSection.reduce((sum, c) => sum + rawExact(c), 0);
       return { id: s.id, title: s.title, score: w > 0 ? round2((p / w) * 100) : null, hasScoring: inSection.length > 0 };

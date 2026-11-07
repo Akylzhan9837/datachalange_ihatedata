@@ -8,6 +8,7 @@ import {
   saveChecklist,
   getDataset,
   saveDataset,
+  getConversation,
   listEvaluations,
   getEvaluation,
   getEvaluationByConversation,
@@ -16,7 +17,11 @@ import {
   getAppeal,
   saveAppeal,
 } from './store.js';
-import type { Checklist, DatasetResponse, Appeal } from '../shared/types.js';
+import { evaluateConversation, EvaluationError } from './evaluate.js';
+import { geminiCall, LlmError } from './llm.js';
+import { computeScore } from '../shared/scoring.js';
+import { analyzeTranscript, crossCheck } from './rules.js';
+import type { Checklist, DatasetResponse, Appeal, EvaluationResult } from '../shared/types.js';
 
 dotenv.config();
 
@@ -89,10 +94,24 @@ app.post('/api/checklists', (req: Request, res: Response) => {
   res.status(201).json(saved);
 });
 
+export function isAllowedAudioHost(audioPageUrl: string): boolean {
+  try {
+    const parsed = new URL(audioPageUrl);
+    const host = parsed.hostname.toLowerCase();
+    return host === 'api.powerplatform.com' || host.endsWith('.api.powerplatform.com');
+  } catch {
+    return false;
+  }
+}
+
 app.get('/api/audio', async (req: Request, res: Response) => {
   const audioPageUrl = req.query.url as string;
   if (!audioPageUrl) {
     return res.status(400).json({ error: 'Missing url parameter' });
+  }
+
+  if (!isAllowedAudioHost(audioPageUrl)) {
+    return res.status(400).json({ error: 'SSRF blocked: host must be *.api.powerplatform.com' });
   }
 
   try {
@@ -133,6 +152,95 @@ app.get('/api/evaluations/by-conversation/:conversation_id', (req: Request, res:
     return res.status(404).json({ error: 'Evaluation not found' });
   }
   res.json(evaluation);
+});
+
+app.post('/api/evaluate', async (req: Request, res: Response) => {
+  const { conversation_id, checklist_id = 'cqa-full', force } = req.body || {};
+  if (!conversation_id) {
+    return res.status(400).json({ error: 'conversation_id is required' });
+  }
+
+  const checklist = getChecklist(checklist_id) || getChecklist('default');
+  if (!checklist) {
+    return res.status(404).json({ error: `Checklist '${checklist_id}' not found` });
+  }
+
+  if (!force) {
+    const cached = getEvaluationByConversation(conversation_id, checklist.id, Number(checklist.version));
+    if (cached) {
+      return res.json(cached);
+    }
+  }
+
+  const conv = getConversation(conversation_id);
+  if (!conv) {
+    return res.status(404).json({ error: `Conversation '${conversation_id}' not found` });
+  }
+
+  try {
+    const draft = await evaluateConversation(conv, checklist, geminiCall());
+
+    const answersForScoring = draft.items.map((it) => ({
+      criterion_id: it.criterion_id,
+      answer: String(it.answer),
+      step: typeof it.answer === 'number' ? it.answer : null,
+    }));
+
+    const scoreResult = computeScore(checklist as any, answersForScoring);
+
+    const hints = analyzeTranscript(conv.transcript as any);
+    const ruleFlags = crossCheck(hints, answersForScoring);
+    const flagsByCrit = new Map(ruleFlags.map((f) => [f.criterion_id, f.message]));
+
+    const evaluation: EvaluationResult = {
+      id: crypto.randomUUID(),
+      conversation_id: draft.conversation_id,
+      checklist_id: draft.checklist_id,
+      checklist_version: draft.checklist_version,
+      model: draft.model,
+      cost: draft.cost_usd,
+      evaluated_at: draft.created_at,
+      items: draft.items.map((it) => {
+        const scored = scoreResult.items.find((si) => si.criterion_id === it.criterion_id);
+        const flagMsg = flagsByCrit.get(it.criterion_id);
+        return {
+          criterion_id: it.criterion_id,
+          answer: it.answer,
+          step: typeof it.answer === 'number' ? it.answer : null,
+          evidence: it.evidence,
+          checked_range: it.checked_range ?? undefined,
+          reason: it.reason,
+          na_reason: it.na_reason,
+          raw_points: scored?.raw_points,
+          points: scored?.points,
+          weight: scored?.weight,
+          effective_weight: scored?.max_points,
+          max_points: scored?.max_points,
+          needs_review: it.needs_review || Boolean(flagMsg),
+          review_reason: it.review_reason || flagMsg || null,
+        };
+      }),
+      total_score: scoreResult.total,
+      section_scores: Object.fromEntries(scoreResult.sections.map((s) => [s.id, s.score])),
+      gross_violation: scoreResult.gross,
+      rule_flags: ruleFlags,
+    };
+
+    saveEvaluation(evaluation);
+
+    return res.status(200).json({
+      ...evaluation,
+      prompt_version: draft.prompt_version,
+      usage: draft.usage,
+      duration_ms: draft.duration_ms,
+      draft_items: draft.items,
+    });
+  } catch (error) {
+    if (error instanceof EvaluationError || error instanceof LlmError) {
+      return res.status(502).json({ error: error.message });
+    }
+    return res.status(500).json({ error: (error as Error).message });
+  }
 });
 
 app.post('/api/appeals', (req: Request, res: Response) => {
@@ -195,7 +303,41 @@ app.post('/api/appeals/:id/decide', (req: Request, res: Response) => {
       const item = evaluation.items.find((i) => i.criterion_id === appeal.criterion_id);
       if (item) {
         item.answer = reviewer_answer;
+        item.step = typeof reviewer_answer === 'number' ? reviewer_answer : null;
+
+        const checklist = getChecklist(evaluation.checklist_id);
+        if (checklist) {
+          try {
+            const scoreResult = computeScore(
+              checklist as any,
+              evaluation.items.map((it) => ({
+                criterion_id: it.criterion_id,
+                answer: String(it.answer),
+                step: typeof it.answer === 'number' ? it.answer : (it.step ?? null),
+              })),
+            );
+            evaluation.total_score = scoreResult.total;
+            evaluation.section_scores = Object.fromEntries(
+              scoreResult.sections.map((s) => [s.id, s.score]),
+            );
+            evaluation.gross_violation = scoreResult.gross;
+            for (const scored of scoreResult.items) {
+              const targetItem = evaluation.items.find((it) => it.criterion_id === scored.criterion_id);
+              if (targetItem) {
+                targetItem.raw_points = scored.raw_points;
+                targetItem.points = scored.points;
+                targetItem.weight = scored.weight;
+                targetItem.effective_weight = scored.max_points;
+                targetItem.max_points = scored.max_points;
+              }
+            }
+          } catch {
+            // Keep existing score if recalculation encounters validation issues
+          }
+        }
+
         saveEvaluation(evaluation);
+        appeal.final_score = evaluation.total_score;
       }
     }
   }
@@ -204,7 +346,9 @@ app.post('/api/appeals/:id/decide', (req: Request, res: Response) => {
   res.json(appeal);
 });
 
-if (process.env.NODE_ENV !== 'test') {
+const isTest = process.env.NODE_ENV === 'test' || Boolean(process.argv[1]?.includes('test'));
+
+if (!isTest) {
   app.listen(PORT, () => {
     process.stdout.write(`Server running on port ${PORT}\n`);
   });
