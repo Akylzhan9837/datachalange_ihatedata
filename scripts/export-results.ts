@@ -54,6 +54,8 @@ const runsDir = path.resolve('data/storage/tl-runs');
 fs.mkdirSync(cacheDir, { recursive: true });
 
 function cachedDraft(id: string): EvaluationDraft | null {
+  const stored = storedDraft(id);
+  if (stored) return stored;
   const files = [path.join(cacheDir, `${id}.json`)];
   if (fs.existsSync(runsDir)) {
     files.push(...fs.readdirSync(runsDir).filter((f) => f.startsWith(`${id}.`)).sort().reverse().map((f) => path.join(runsDir, f)));
@@ -63,7 +65,7 @@ function cachedDraft(id: string): EvaluationDraft | null {
     const d = JSON.parse(fs.readFileSync(f, 'utf-8')) as EvaluationDraft;
     if (d.conversation_id === id && d.checklist_id === cl.id && d.checklist_version === cl.version && d.prompt_version === PROMPT_VERSION) return d;
   }
-  return storedDraft(id);
+  return null;
 }
 
 const appealed = new Set(listAppeals().filter((a) => a.status === 'accepted').map((a) => a.evaluation_id));
