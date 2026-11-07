@@ -11,7 +11,7 @@ import {
   EvaluationError,
   type EvalChecklist,
 } from '../server/evaluate.js';
-import { parseResponse, type LlmCall, type LlmRequest } from '../server/llm.js';
+import { geminiCall, parseResponse, type LlmCall, type LlmRequest } from '../server/llm.js';
 import type { Conversation } from '../shared/types.js';
 
 const cl: EvalChecklist = JSON.parse(fs.readFileSync(path.resolve('data/checklists/cqa-full.json'), 'utf-8'));
@@ -147,4 +147,35 @@ test('Gemini response parsing: text without thoughts, usage, block reasons', () 
   assert.equal(r.model, 'gemini-x');
   assert.throws(() => parseResponse({ promptFeedback: { blockReason: 'SAFETY' } }, 'm'), /SAFETY/);
   assert.throws(() => parseResponse({ candidates: [{ finishReason: 'MAX_TOKENS' }] }, 'm'), /MAX_TOKENS/);
+});
+
+test('Gemini: 503 and 429 move to the next model, 400 stops at once', async () => {
+  const realFetch = globalThis.fetch;
+  const seen: string[] = [];
+  const reply = (status: number) => new Response(
+    status === 200 ? JSON.stringify({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '{}' }] } }] }) : '{"error":{}}',
+    { status },
+  );
+  try {
+    const plan: Record<string, number> = { a: 503, b: 429, c: 200 };
+    globalThis.fetch = (async (url: string) => {
+      const m = url.split('/models/')[1].split(':')[0];
+      seen.push(m);
+      return reply(plan[m]);
+    }) as typeof fetch;
+    const r = await geminiCall({ apiKey: 'k', model: 'a, b ,c', maxAttempts: 1 })({ system: 's', user: 'u', schema: {} });
+    assert.equal(r.model, 'c');
+    assert.deepEqual(seen, ['a', 'b', 'c']);
+
+    plan.a = 400;
+    seen.length = 0;
+    await assert.rejects(geminiCall({ apiKey: 'k', model: 'a,c', maxAttempts: 1 })({ system: 's', user: 'u', schema: {} }), /a HTTP 400/);
+    assert.deepEqual(seen, ['a']);
+
+    plan.a = 503;
+    plan.c = 503;
+    await assert.rejects(geminiCall({ apiKey: 'k', model: 'a,c', maxAttempts: 1 })({ system: 's', user: 'u', schema: {} }), /a HTTP 503; c HTTP 503/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

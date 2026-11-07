@@ -21,6 +21,7 @@ export class LlmError extends Error {}
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+const DEFAULT_MODELS = 'gemini-3.5-flash,gemini-3.8-flash,gemini-2.5-flash';
 
 export function geminiCall(opts: {
   apiKey?: string;
@@ -29,13 +30,13 @@ export function geminiCall(opts: {
   maxAttempts?: number;
 } = {}): LlmCall {
   const apiKey = opts.apiKey ?? process.env.GEMINI_API_KEY;
-  const model = opts.model ?? process.env.GEMINI_MODEL ?? 'gemini-3.8-flash';
+  const models = (opts.model ?? process.env.GEMINI_MODEL ?? DEFAULT_MODELS).split(',').map((m) => m.trim()).filter(Boolean);
   const thinkingLevel = opts.thinkingLevel ?? process.env.GEMINI_THINKING_LEVEL;
-  const maxAttempts = opts.maxAttempts ?? 4;
+  const maxAttempts = opts.maxAttempts ?? 3;
 
   return async (req) => {
     if (!apiKey) throw new LlmError('GEMINI_API_KEY is not set (.env)');
-    const body = {
+    const body = JSON.stringify({
       systemInstruction: { parts: [{ text: req.system }] },
       contents: [{ role: 'user', parts: [{ text: req.user }] }],
       generationConfig: {
@@ -45,23 +46,27 @@ export function geminiCall(opts: {
         responseJsonSchema: req.schema,
         ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
       },
-    };
-    const url = `${API_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    });
+    const failures: string[] = [];
 
-    for (let attempt = 1; ; attempt++) {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(180_000),
-      });
-      if (res.ok) return parseResponse((await res.json()) as GeminiBody, model);
-      const detail = (await res.text()).slice(0, 300);
-      if (!RETRYABLE.has(res.status) || attempt >= maxAttempts) {
-        throw new LlmError(`Gemini HTTP ${res.status}: ${detail}`);
+    for (const model of models) {
+      const url = `${API_BASE}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body,
+          signal: AbortSignal.timeout(180_000),
+        });
+        if (res.ok) return parseResponse((await res.json()) as GeminiBody, model);
+        const detail = (await res.text()).slice(0, 300);
+        if (!RETRYABLE.has(res.status)) throw new LlmError(`Gemini ${model} HTTP ${res.status}: ${detail}`);
+        failures.push(`${model} HTTP ${res.status}`);
+        if (res.status === 429 || attempt === maxAttempts) break;
+        await new Promise((r) => setTimeout(r, 2000 * 2 ** (attempt - 1)));
       }
-      await new Promise((r) => setTimeout(r, 2000 * 2 ** (attempt - 1)));
     }
+    throw new LlmError(`Gemini unavailable: ${failures.join('; ')}`);
   };
 }
 
