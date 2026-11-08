@@ -4,6 +4,7 @@ import { byId, element, number } from './ui.js';
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const dates = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' });
 const dayLength = 86400000;
+const clock = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
 const metrics = new Map();
 const period = byId('trend-period');
 let records = null;
@@ -108,14 +109,32 @@ function renderTrend(results) {
   const first = new Date(end);
   const span = Number(period.value) - 1;
   first.setDate(first.getDate() - span);
+  const scored = results
+    .map((result) => ({ t: reviewedAt(result), score: result.total_score }))
+    .filter(({ t, score }) => t >= first.getTime() && Number.isFinite(score));
+  const days = new Set(scored.map(({ t }) => new Date(t).setHours(0, 0, 0, 0)));
+  let from = first.getTime();
+  let to = end.getTime();
+  let step = dayLength;
+  let label = (value) => dates.format(value);
+  let unit = 'по дням оценки';
+  if (days.size === 1) {
+    const times = scored.map(({ t }) => t);
+    const low = Math.min(...times);
+    const high = Math.max(...times);
+    step = high - low > 2 * 3600000 ? 3600000 : 600000;
+    from = Math.floor(low / step) * step;
+    to = Math.max(Math.floor(high / step) * step, from + step);
+    label = (value) => clock.format(value);
+    unit = (step === 3600000 ? 'по часам' : 'за каждые 10 минут') + ' · ' + dates.format(low);
+  }
+  const subtitle = byId('trend-title')?.nextElementSibling;
+  if (subtitle) subtitle.textContent = 'Средний балл ' + unit;
   const points = new Map();
-  for (const result of results) {
-    const day = new Date(reviewedAt(result));
-    day.setHours(0, 0, 0, 0);
-    if (day < first || day > end || !Number.isFinite(result.total_score)) continue;
-    const key = day.getTime();
+  for (const { t, score } of scored) {
+    const key = step === dayLength ? new Date(t).setHours(0, 0, 0, 0) : Math.floor(t / step) * step;
     const scores = points.get(key) ?? [];
-    scores.push(result.total_score);
+    scores.push(score);
     points.set(key, scores);
   }
   const chart = chartElement('svg', { viewBox: '0 0 620 184', role: 'img', 'aria-label': 'Средние оценки за выбранный период' });
@@ -126,33 +145,29 @@ function renderTrend(results) {
     label.textContent = tick;
     chart.append(label);
   }
-  for (const [x, date, anchor] of [[35, first, 'start'], [610, end, 'end']]) {
-    const label = chartElement('text', { x, y: 177, 'text-anchor': anchor });
-    label.textContent = dates.format(date);
-    chart.append(label);
+  for (const [x, date, anchor] of [[35, from, 'start'], [610, to, 'end']]) {
+    const axis = chartElement('text', { x, y: 177, 'text-anchor': anchor });
+    axis.textContent = label(date);
+    chart.append(axis);
   }
+  const width = Math.max(to - from, 1);
   const daily = [...points].sort(([a], [b]) => a - b).map(([day, scores]) => {
     const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
-    return { day, average, x: 35 + Math.round((day - first) / dayLength) / span * 575, y: 10 + (100 - average) * 1.42 };
+    return { day, average, count: scores.length, x: 35 + Math.min(1, Math.max(0, (day - from) / width)) * 575, y: 10 + (100 - average) * 1.42 };
   });
   if (daily.length > 1) {
     const path = daily.map(({ x, y }) => x + ',' + y).join(' ');
     chart.append(chartElement('polygon', { points: path + ' ' + daily.at(-1).x + ',152 ' + daily[0].x + ',152', class: 'trend-fill' }));
     chart.append(chartElement('polyline', { points: path, class: 'trend-line' }));
   }
-  for (const { x, y, day, average } of daily) {
+  for (const { x, y, day, average, count } of daily) {
     const dot = chartElement('circle', { cx: x, cy: y, r: 4, class: 'trend-point' });
-    const label = chartElement('title');
-    label.textContent = dates.format(day) + ': ' + number(average) + ' / 100';
-    dot.append(label);
+    const tip = chartElement('title');
+    tip.textContent = label(day) + ': ' + number(average) + ' / 100 · оценок: ' + count;
+    dot.append(tip);
     chart.append(dot);
   }
   container.replaceChildren(chart);
-  if (daily.length === 1) {
-    const point = daily[0];
-    const caption = element('p', dates.format(point.day) + ' · ' + number(point.average) + ' / 100 · один день с оценками', 'trend-one');
-    container.append(caption);
-  }
   if (!daily.length) {
     const coverage = records?.length && evaluations !== null ? Math.round(100 * new Set(results.map((item) => item.conversation_id)).size / records.length) : null;
     const message = unavailable ? 'Оценки недоступны' : evaluations === null || records === null ? 'Загружаем оценки…' : 'За этот период оценок пока нет';
