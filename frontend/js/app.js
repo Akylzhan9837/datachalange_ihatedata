@@ -92,13 +92,8 @@ function renderEvaluation(result, checklist) {
   summary.append(
     element('span', 'Итоговый балл'),
     element('strong', !Number.isFinite(result.total_score) ? 'Не рассчитан' : number(result.total_score) + ' / 100'),
-    element('p', result.gross_violation === undefined ? 'Данные о нарушениях отсутствуют' : result.gross_violation ? 'Обнаружено грубое нарушение' : 'Грубых нарушений нет', result.gross_violation ? 'violation' : ''),
-    element('p', 'Модель · ' + (result.model || '—')),
-    element('p', 'Чек-лист · v' + result.checklist_version + '   /   Промпт · ' + (result.prompt_version || '—'))
+    element('p', result.gross_violation === undefined ? 'Данные о нарушениях отсутствуют' : result.gross_violation ? 'Обнаружена грубая ошибка' : 'Грубых ошибок нет', result.gross_violation ? 'violation' : '')
   );
-  for (const [section, score] of Object.entries(result.section_scores ?? {})) {
-    summary.append(element('p', section + ': ' + number(score)));
-  }
 
   if (Number.isFinite(result.total_score)) {
     const meter = element('meter');
@@ -108,18 +103,33 @@ function renderEvaluation(result, checklist) {
     meter.setAttribute('aria-label', 'Итоговый балл');
     summary.append(meter);
   }
+  const details = element('details', undefined, 'quiet-score-details');
+  const metadata = element('div', undefined, 'quiet-detail');
+  metadata.append(
+    element('p', 'Модель · ' + (result.model || '—')),
+    element('p', 'Чек-лист · v' + result.checklist_version + ' · Промпт · ' + (result.prompt_version || '—'))
+  );
+  for (const [section, score] of Object.entries(result.section_scores ?? {})) {
+    metadata.append(element('p', section + ': ' + number(score)));
+  }
+  details.append(element('summary', 'Подробности оценки'), metadata);
+  summary.append(details);
+
   const criteria = result.items.map((item) => {
     const row = element('details', undefined, 'criterion');
-    row.open = Boolean(item.needs_review || (result.gross_violation && String(item.criterion_id).padStart(2, '0') === '08'));
+    row.name = 'evaluation-criteria';
+    row.open = Boolean(result.gross_violation && String(item.criterion_id).padStart(2, '0') === '08');
+    const body = element('div', undefined, 'quiet-detail');
     const heading = element('summary');
     heading.append(
       element('h3', titles.get(item.criterion_id) ?? item.criterion_id),
-      element('p', answerLabel(item.answer) + ' · Баллы: ' + number(item.points) + (Number.isFinite(item.max_points) ? ' / ' + number(item.max_points) : '') + ' · Вес: ' + number(item.weight), 'meta')
+      element('p', answerLabel(item.answer) + ' · ' + number(item.points) + ' б.' + (item.needs_review ? ' · ⚠ На проверку' : ''), 'meta')
     );
-    row.append(heading);
-    if (item.needs_review) row.append(element('p', '⚠️ На проверку' + (item.review_reason ? ' · ' + item.review_reason : ''), 'review-flag'));
-    if (item.reason) row.append(element('p', item.reason));
-    if (item.answer === 'na' && item.na_reason && item.na_reason !== item.reason) row.append(element('p', item.na_reason));
+    row.append(heading, body);
+    body.append(element('p', 'Баллы: ' + number(item.points) + (Number.isFinite(item.max_points) ? ' / ' + number(item.max_points) : '') + ' · Вес: ' + number(item.weight), 'meta'));
+    if (item.needs_review) body.append(element('p', '⚠️ На проверку' + (item.review_reason ? ' · ' + item.review_reason : ''), 'review-flag'));
+    if (item.reason) body.append(element('p', item.reason));
+    if (item.answer === 'na' && item.na_reason && item.na_reason !== item.reason) body.append(element('p', item.na_reason));
     const evidence = element('div', undefined, 'evidence');
     for (const index of new Set(item.evidence ?? [])) {
       const button = evidenceButton('Реплика #' + index, index);
@@ -130,9 +140,9 @@ function renderEvaluation(result, checklist) {
       const button = evidenceButton('Участок #' + start + '–' + end, start, end);
       if (button) evidence.append(button);
     }
-    if (evidence.childElementCount) row.append(evidence);
+    if (evidence.childElementCount) body.append(evidence);
     if (result.id) {
-      row.append(button('Оспорить', () => openAppeal(result.id, item.criterion_id,
+      body.append(button('Оспорить', () => openAppeal(result.id, item.criterion_id,
         titles.get(item.criterion_id) ?? 'Критерий ' + item.criterion_id,
         () => renderHistory(result, checklist)), 'action appeal-link'));
     }
@@ -291,7 +301,6 @@ async function loadDialogues(requested) {
     const incoming = await getDialogues(requested);
     selection?.abort();
     records = incoming;
-    byId('stat-total').textContent = records.length;
     document.dispatchEvent(new CustomEvent('dataset-loaded', { detail: records }));
     groupId = requested;
     byId('group-label').textContent = groupId;
