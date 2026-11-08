@@ -39,102 +39,6 @@ function channelName(channel) {
   return channel;
 }
 
-const SPEECH_CHARS_PER_SECOND = 15;
-const SPEECH_DEFAULT_SHIFT = 4;
-let speech = { cues: [], current: -1, shift: SPEECH_DEFAULT_SHIFT };
-
-async function calibrateSpeech(src, conversationId) {
-  try {
-    const buffer = await (await fetch(src)).arrayBuffer();
-    const audio = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(buffer);
-    if (activeId !== conversationId || !speech.cues.length) return;
-    const samples = audio.getChannelData(0);
-    const frame = Math.round(audio.sampleRate / 10);
-    const level = [];
-    for (let i = 0; i + frame <= samples.length; i += frame) {
-      let sum = 0;
-      for (let k = i; k < i + frame; k++) sum += samples[k] * samples[k];
-      level.push(10 * Math.log10(sum / frame + 1e-12));
-    }
-    const sorted = [...level].sort((a, b) => a - b);
-    const low = sorted[Math.floor(sorted.length * 0.1)];
-    const high = sorted[Math.floor(sorted.length * 0.9)];
-    const voiced = level.map((value) => value > low + (high - low) * 0.35);
-    let best = { shift: speech.shift, score: -1 };
-    for (let shift = -8; shift <= 10; shift += 0.5) {
-      let hit = 0;
-      let total = 0;
-      for (const cue of speech.cues) {
-        for (let k = Math.max(0, Math.floor((cue.start + shift) * 10)); k < Math.min(voiced.length, Math.ceil((cue.end + shift) * 10)); k++) {
-          total++;
-          if (voiced[k]) hit++;
-        }
-      }
-      if (total && hit / total > best.score) best = { shift, score: hit / total };
-    }
-    speech.shift = best.shift;
-    speech.current = -1;
-    showSpeech();
-  } catch {
-    speech.shift = SPEECH_DEFAULT_SHIFT;
-  }
-}
-let speechFrame = 0;
-
-function speechCues(record) {
-  const times = record.transcript.map((message) => Date.parse(message.timestamp));
-  if (!times.length || !times.every(Number.isFinite)) return { cues: [], current: -1, shift: SPEECH_DEFAULT_SHIFT };
-  const startIndex = record.transcript.findIndex((message) => message.speaker === 'system' && /запущены|басталды|started/i.test(message.text));
-  const zero = times[Math.max(0, startIndex)];
-  let paused = 0;
-  let pauseStart = null;
-  let previousEnd = 0;
-  const cues = [];
-  record.transcript.forEach((message, index) => {
-    if (message.speaker === 'system' && /приостановлен/i.test(message.text)) pauseStart = times[index];
-    if (message.speaker === 'system' && /возобновлен/i.test(message.text) && pauseStart !== null) {
-      paused += times[index] - pauseStart;
-      pauseStart = null;
-    }
-    const text = message.text.trim();
-    if (message.speaker === 'system' || !text || /^\[.*\]$/.test(text)) return;
-    const end = (times[index] - zero - paused) / 1000;
-    const start = Math.min(end - 0.3, Math.max(previousEnd, end - text.length / SPEECH_CHARS_PER_SECOND));
-    cues.push({ start, end, index, message, text });
-    previousEnd = Math.max(previousEnd, end);
-  });
-  return { cues, current: -1, shift: SPEECH_DEFAULT_SHIFT };
-}
-
-function showSpeech() {
-  const audio = byId('recording');
-  const caption = byId('recording-caption');
-  if (!speech.cues.length) return;
-  const at = audio.currentTime - speech.shift;
-  let current = -1;
-  for (let i = 0; i < speech.cues.length && speech.cues[i].start <= at; i++) current = i;
-  if (current !== speech.current) {
-    document.querySelector('.message.speaking')?.classList.remove('speaking');
-    speech.current = current;
-    if (current < 0) {
-      caption.hidden = true;
-      return;
-    }
-    const { index, message } = speech.cues[current];
-    caption.replaceChildren(element('b', roles[message.speaker] ?? message.speaker), document.createTextNode(speech.cues[current].text));
-    caption.hidden = false;
-    const item = byId('message-' + (index + 1));
-    item?.classList.add('speaking');
-    if (!audio.paused) item?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }
-}
-
-function followSpeech() {
-  cancelAnimationFrame(speechFrame);
-  showSpeech();
-  if (!byId('recording').paused) speechFrame = requestAnimationFrame(followSpeech);
-}
-
 function renderTranscript(record) {
   byId('conversation-meta').textContent = record.conversation_id + ' · ' + channelName(record.channel) + ' · ' + record.language + ' · ' + record.transcript.length + ' репл.';
   const recording = byId('recording');
@@ -142,15 +46,8 @@ function renderTranscript(record) {
   recording.pause();
   recording.removeAttribute('src');
   recording.load();
-  speech = { cues: [], current: -1, shift: SPEECH_DEFAULT_SHIFT };
-  byId('recording-caption').hidden = true;
   if (typeof record.audio_url === 'string' && /^https?:\/\//i.test(record.audio_url)) {
-    speech = speechCues(record);
-    getAudioSource(record.audio_url).then(({ src }) => {
-      if (activeId !== record.conversation_id || !src) return;
-      recording.src = src;
-      calibrateSpeech(src, record.conversation_id);
-    }).catch(() => {});
+    getAudioSource(record.audio_url).then(({ src }) => { if (activeId === record.conversation_id && src) recording.src = src; }).catch(() => {});
     byId('recording-player').hidden = false;
   }
 
@@ -576,9 +473,8 @@ recordingToggle.addEventListener('click', () => {
   if (recordingAudio.paused) recordingAudio.play().catch(() => { recordingToggle.dataset.error = ''; recordingToggle.setAttribute('aria-label', 'Запись недоступна'); });
   else recordingAudio.pause();
 });
-recordingAudio.addEventListener('play', () => { recordingToggle.dataset.playing = ''; recordingToggle.setAttribute('aria-label', 'Пауза'); followSpeech(); });
+recordingAudio.addEventListener('play', () => { recordingToggle.dataset.playing = ''; recordingToggle.setAttribute('aria-label', 'Пауза'); });
 recordingAudio.addEventListener('pause', () => { delete recordingToggle.dataset.playing; recordingToggle.setAttribute('aria-label', 'Воспроизвести запись'); });
-recordingAudio.addEventListener('seeked', showSpeech);
 recordingAudio.addEventListener('timeupdate', () => {
   recordingProgress.value = recordingAudio.duration ? Math.round(1000 * recordingAudio.currentTime / recordingAudio.duration) : 0;
   recordingTime.textContent = recordingClock(recordingAudio.currentTime) + ' / ' + recordingClock(recordingAudio.duration);
