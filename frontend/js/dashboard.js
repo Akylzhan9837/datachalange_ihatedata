@@ -148,11 +148,24 @@ function renderTrend(results) {
     chart.append(dot);
   }
   container.replaceChildren(chart);
+  if (daily.length === 1) {
+    const point = daily[0];
+    const caption = element('p', dates.format(point.day) + ' · ' + number(point.average) + ' / 100 · один день с оценками', 'trend-one');
+    container.append(caption);
+  }
   if (!daily.length) {
+    const coverage = records?.length && evaluations !== null ? Math.round(100 * new Set(history.map((item) => item.conversation_id)).size / records.length) : null;
     const message = unavailable ? 'Оценки недоступны' : evaluations === null || records === null ? 'Загружаем оценки…' : 'За этот период оценок пока нет';
     const empty = element('div', undefined, 'trend-empty');
     empty.append(element('span', '◌'), element('strong', message));
-    if (!unavailable && evaluations !== null && records !== null) empty.append(element('p', 'Динамика появится после сохранения оценок.'));
+    if (!unavailable && evaluations !== null && records !== null) {
+      empty.append(element('p', coverage === null ? 'Динамика появится после сохранения оценок.' : 'Охват проверки: ' + coverage + '% · ' + new Set(history.map((item) => item.conversation_id)).size + ' из ' + records.length + ' диалогов.'));
+      const track = element('progress');
+      track.max = 100;
+      track.value = coverage ?? 0;
+      track.setAttribute('aria-label', 'Охват проверки');
+      empty.append(track);
+    }
     container.append(empty);
   }
 }

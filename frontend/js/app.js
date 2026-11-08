@@ -42,13 +42,13 @@ function channelName(channel) {
 function renderTranscript(record) {
   byId('conversation-meta').textContent = record.conversation_id + ' · ' + channelName(record.channel) + ' · ' + record.language + ' · ' + record.transcript.length + ' репл.';
   const recording = byId('recording');
-  recording.hidden = true;
+  byId('recording-player').hidden = true;
   recording.pause();
   recording.removeAttribute('src');
   recording.load();
   if (typeof record.audio_url === 'string' && /^https?:\/\//i.test(record.audio_url)) {
     recording.src = record.audio_url;
-    recording.hidden = false;
+    byId('recording-player').hidden = false;
   }
 
   transcript.replaceChildren(...record.transcript.map((message, index) => {
@@ -462,3 +462,21 @@ document.addEventListener('evaluation-list-loaded', ({ detail }) => {
 document.addEventListener('evaluation-loaded', ({ detail }) => rememberLatestEvaluation(detail));
 void loadDialogues(groupId);
 void loadChecklists();
+
+const recordingAudio = byId('recording');
+const recordingToggle = byId('recording-toggle');
+const recordingProgress = byId('recording-progress');
+const recordingTime = byId('recording-time');
+const recordingClock = (seconds) => Number.isFinite(seconds) ? Math.floor(seconds / 60) + ':' + String(Math.floor(seconds % 60)).padStart(2, '0') : '0:00';
+recordingToggle.addEventListener('click', () => {
+  if (recordingAudio.paused) recordingAudio.play().catch(() => { recordingToggle.textContent = '⚠'; });
+  else recordingAudio.pause();
+});
+recordingAudio.addEventListener('play', () => { recordingToggle.textContent = 'Ⅱ'; recordingToggle.setAttribute('aria-label', 'Пауза'); });
+recordingAudio.addEventListener('pause', () => { recordingToggle.textContent = '▶'; recordingToggle.setAttribute('aria-label', 'Воспроизвести запись'); });
+recordingAudio.addEventListener('timeupdate', () => {
+  recordingProgress.value = recordingAudio.duration ? Math.round(1000 * recordingAudio.currentTime / recordingAudio.duration) : 0;
+  recordingTime.textContent = recordingClock(recordingAudio.currentTime) + ' / ' + recordingClock(recordingAudio.duration);
+});
+recordingAudio.addEventListener('loadedmetadata', () => { recordingTime.textContent = '0:00 / ' + recordingClock(recordingAudio.duration); });
+recordingProgress.addEventListener('input', () => { if (recordingAudio.duration) recordingAudio.currentTime = recordingAudio.duration * Number(recordingProgress.value) / 1000; });
