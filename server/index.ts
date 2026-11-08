@@ -31,6 +31,7 @@ const CQA_API_URL = process.env.CQA_API_URL || '';
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static('frontend'));
 
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

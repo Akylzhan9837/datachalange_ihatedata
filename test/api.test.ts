@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
   getChecklist,
@@ -12,9 +13,20 @@ import {
   getEvaluation,
   saveAppeal,
   getAppeal,
+  setStorageDir,
 } from '../server/store.js';
 import { isAllowedAudioHost } from '../server/index.js';
 import type { EvaluationResult, Appeal } from '../shared/types.js';
+
+const tempStorageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cqa-test-storage-'));
+setStorageDir(tempStorageDir);
+
+test.after(() => {
+  setStorageDir();
+  try {
+    fs.rmSync(tempStorageDir, { recursive: true, force: true });
+  } catch {}
+});
 
 test('checklist store returns default checklist with 8 criteria', () => {
   const checklist = getChecklist('default');

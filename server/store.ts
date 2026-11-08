@@ -5,7 +5,19 @@ import type { Checklist, EvaluationResult, Appeal, DatasetResponse, Conversation
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const CHECKLISTS_DIR = path.join(DATA_DIR, 'checklists');
 const SETS_DIR = path.join(DATA_DIR, 'sets');
-const STORAGE_DIR = path.join(DATA_DIR, 'storage');
+
+export function getStorageDir(): string {
+  return process.env.STORAGE_DIR || path.join(DATA_DIR, 'storage');
+}
+
+export function setStorageDir(dir?: string): void {
+  if (dir) {
+    process.env.STORAGE_DIR = dir;
+    ensureDir(dir);
+  } else {
+    delete process.env.STORAGE_DIR;
+  }
+}
 
 function ensureDir(dirPath: string): void {
   if (!fs.existsSync(dirPath)) {
@@ -15,10 +27,15 @@ function ensureDir(dirPath: string): void {
 
 ensureDir(CHECKLISTS_DIR);
 ensureDir(SETS_DIR);
-ensureDir(STORAGE_DIR);
+ensureDir(getStorageDir());
 
-const EVALUATIONS_FILE = path.join(STORAGE_DIR, 'evaluations.json');
-const APPEALS_FILE = path.join(STORAGE_DIR, 'appeals.json');
+function getEvaluationsFile(): string {
+  return path.join(getStorageDir(), 'evaluations.json');
+}
+
+function getAppealsFile(): string {
+  return path.join(getStorageDir(), 'appeals.json');
+}
 
 function readJsonFile<T>(filePath: string, defaultValue: T): T {
   try {
@@ -94,7 +111,7 @@ export function getConversation(id: string): Conversation | null {
 }
 
 export function listEvaluations(): EvaluationResult[] {
-  return readJsonFile<EvaluationResult[]>(EVALUATIONS_FILE, []);
+  return readJsonFile<EvaluationResult[]>(getEvaluationsFile(), []);
 }
 
 export function getEvaluation(id: string): EvaluationResult | null {
@@ -147,12 +164,12 @@ export function saveEvaluation(evaluation: EvaluationResult): EvaluationResult {
   } else {
     evals.push(evaluation);
   }
-  writeJsonFile(EVALUATIONS_FILE, evals);
+  writeJsonFile(getEvaluationsFile(), evals);
   return evaluation;
 }
 
 export function listAppeals(evaluationId?: string): Appeal[] {
-  const appeals = readJsonFile<Appeal[]>(APPEALS_FILE, []);
+  const appeals = readJsonFile<Appeal[]>(getAppealsFile(), []);
   if (evaluationId) {
     return appeals.filter((a) => a.evaluation_id === evaluationId);
   }
@@ -172,6 +189,6 @@ export function saveAppeal(appeal: Appeal): Appeal {
   } else {
     appeals.push(appeal);
   }
-  writeJsonFile(APPEALS_FILE, appeals);
+  writeJsonFile(getAppealsFile(), appeals);
   return appeal;
 }
