@@ -39,6 +39,48 @@ function channelName(channel) {
   return channel;
 }
 
+let speech = { cues: [], span: 0, current: -1 };
+
+function speechCues(record) {
+  const times = record.transcript.map((message) => Date.parse(message.timestamp));
+  if (!times.length || !times.every(Number.isFinite)) return { cues: [], span: 0, current: -1 };
+  let paused = 0;
+  let pauseStart = null;
+  const cues = [];
+  record.transcript.forEach((message, index) => {
+    if (message.speaker === 'system' && /приостановлен/i.test(message.text)) pauseStart = times[index];
+    if (message.speaker === 'system' && /возобновлен/i.test(message.text) && pauseStart !== null) {
+      paused += times[index] - pauseStart;
+      pauseStart = null;
+    }
+    const at = (times[index] - times[0] - paused) / 1000;
+    if (message.speaker !== 'system' && message.text.trim()) cues.push({ at, index, message });
+  });
+  return { cues, span: (times.at(-1) - times[0] - paused) / 1000, current: -1 };
+}
+
+function showSpeech() {
+  const audio = byId('recording');
+  const caption = byId('recording-caption');
+  if (!speech.cues.length || !audio.duration) return;
+  const at = audio.currentTime * (speech.span > 0 ? speech.span / audio.duration : 1);
+  let current = -1;
+  for (let i = 0; i < speech.cues.length && speech.cues[i].at <= at + 0.4; i++) current = i;
+  if (current === speech.current) return;
+  document.querySelector('.message.speaking')?.classList.remove('speaking');
+  speech.current = current;
+  if (current < 0) {
+    caption.hidden = true;
+    return;
+  }
+  const { index, message } = speech.cues[current];
+  caption.replaceChildren(element('b', roles[message.speaker] ?? message.speaker), document.createTextNode(message.text));
+  caption.hidden = false;
+  const item = byId('message-' + (index + 1));
+  item?.classList.add('speaking');
+  if (!audio.paused) item?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
 function renderTranscript(record) {
   byId('conversation-meta').textContent = record.conversation_id + ' · ' + channelName(record.channel) + ' · ' + record.language + ' · ' + record.transcript.length + ' репл.';
   const recording = byId('recording');
@@ -46,9 +88,12 @@ function renderTranscript(record) {
   recording.pause();
   recording.removeAttribute('src');
   recording.load();
+  speech = { cues: [], span: 0, current: -1 };
+  byId('recording-caption').hidden = true;
   if (typeof record.audio_url === 'string' && /^https?:\/\//i.test(record.audio_url)) {
     getAudioSource(record.audio_url).then(({ src }) => { if (activeId === record.conversation_id && src) recording.src = src; }).catch(() => {});
     byId('recording-player').hidden = false;
+    speech = speechCues(record);
   }
 
   transcript.replaceChildren(...record.transcript.map((message, index) => {
@@ -469,11 +514,13 @@ const recordingProgress = byId('recording-progress');
 const recordingTime = byId('recording-time');
 const recordingClock = (seconds) => Number.isFinite(seconds) ? Math.floor(seconds / 60) + ':' + String(Math.floor(seconds % 60)).padStart(2, '0') : '0:00';
 recordingToggle.addEventListener('click', () => {
-  if (recordingAudio.paused) recordingAudio.play().catch(() => { recordingToggle.textContent = '⚠'; });
+  delete recordingToggle.dataset.error;
+  if (recordingAudio.paused) recordingAudio.play().catch(() => { recordingToggle.dataset.error = ''; recordingToggle.setAttribute('aria-label', 'Запись недоступна'); });
   else recordingAudio.pause();
 });
-recordingAudio.addEventListener('play', () => { recordingToggle.textContent = 'Ⅱ'; recordingToggle.setAttribute('aria-label', 'Пауза'); });
-recordingAudio.addEventListener('pause', () => { recordingToggle.textContent = '▶'; recordingToggle.setAttribute('aria-label', 'Воспроизвести запись'); });
+recordingAudio.addEventListener('play', () => { recordingToggle.dataset.playing = ''; recordingToggle.setAttribute('aria-label', 'Пауза'); });
+recordingAudio.addEventListener('pause', () => { delete recordingToggle.dataset.playing; recordingToggle.setAttribute('aria-label', 'Воспроизвести запись'); });
+recordingAudio.addEventListener('timeupdate', showSpeech);
 recordingAudio.addEventListener('timeupdate', () => {
   recordingProgress.value = recordingAudio.duration ? Math.round(1000 * recordingAudio.currentTime / recordingAudio.duration) : 0;
   recordingTime.textContent = recordingClock(recordingAudio.currentTime) + ' / ' + recordingClock(recordingAudio.duration);
