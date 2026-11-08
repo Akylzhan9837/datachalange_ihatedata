@@ -31,6 +31,7 @@ const rerunButton = byId('rerun-single');
 const editorButton = byId('open-editor');
 const reviewer = byId('reviewer');
 const roles = { client: 'Клиент', operator: 'Оператор', bot: 'Бот', system: 'Система' };
+const clockTime = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 let selection;
 
 function channelName(channel) {
@@ -57,7 +58,10 @@ function renderTranscript(record) {
     item.id = 'message-' + (index + 1);
     item.tabIndex = -1;
     const header = element('div', undefined, 'message-header');
-    header.append(element('strong', '#' + (index + 1) + ' · ' + (roles[speaker] ?? message.speaker)), element('span', message.timestamp));
+    const stamp = /^\d{4}-\d\d-\d\dT/.test(message.timestamp) && Number.isFinite(Date.parse(message.timestamp)) ? clockTime.format(Date.parse(message.timestamp)) : message.timestamp;
+    const time = element('span', stamp);
+    time.title = message.timestamp;
+    header.append(element('strong', '#' + (index + 1) + ' · ' + (roles[speaker] ?? message.speaker)), time);
     item.append(header, element('p', message.text));
     return item;
   }));
@@ -89,7 +93,9 @@ function evidenceButton(label, start, end = start) {
 }
 
 function renderEvaluation(result, checklist) {
-  const titles = new Map(checklist?.criteria.map((criterion) => [criterion.id, criterion.title]));
+  const source = checklist ?? checklists.find((item) => item.id === result.checklist_id);
+  const titles = new Map(source?.criteria.map((criterion) => [criterion.id, criterion.title]));
+  const grossIds = new Set(source?.criteria.filter((criterion) => criterion.is_gross).map((criterion) => criterion.id));
   const summary = element('div', undefined, 'summary');
   summary.append(
     element('span', 'Итоговый балл'),
@@ -123,9 +129,16 @@ function renderEvaluation(result, checklist) {
     row.open = Boolean(result.gross_violation && String(item.criterion_id).padStart(2, '0') === '08');
     const body = element('div', undefined, 'quiet-detail');
     const heading = element('summary');
+    const gross = grossIds.has(item.criterion_id);
+    const share = Number.isFinite(item.points) && item.max_points > 0 ? item.points / item.max_points : null;
+    const scaleTone = share === null ? 'scale' : share >= 0.75 ? 'yes' : share <= 0.25 ? 'no' : 'scale';
+    const tone = item.answer === 'na' ? 'na' : typeof item.answer === 'number' ? scaleTone : (item.answer === 'yes') !== gross ? 'yes' : 'no';
+    const points = gross ? 'флаг' : (Number.isFinite(item.points) ? number(item.points) : '—') + (Number.isFinite(item.max_points) ? ' / ' + number(item.max_points) : '');
     heading.append(
-      element('h3', titles.get(item.criterion_id) ?? item.criterion_id),
-      element('p', answerLabel(item.answer) + ' · ' + number(item.points) + ' б.' + (item.needs_review ? ' · ⚠ На проверку' : ''), 'meta')
+      element('span', String(item.criterion_id).padStart(2, '0'), 'criterion-num'),
+      element('h3', titles.get(item.criterion_id) ?? 'Критерий ' + item.criterion_id),
+      element('span', answerLabel(item.answer) + (item.needs_review ? ' · ⚠' : ''), 'answer-pill ' + tone),
+      element('span', points, 'criterion-points')
     );
     row.append(heading, body);
     body.append(element('p', 'Баллы: ' + number(item.points) + (Number.isFinite(item.max_points) ? ' / ' + number(item.max_points) : '') + ' · Вес: ' + number(item.weight), 'meta'));
