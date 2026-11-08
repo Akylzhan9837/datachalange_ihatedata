@@ -31,6 +31,7 @@ const CQA_API_URL = process.env.CQA_API_URL || '';
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static('frontend'));
 
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -214,8 +215,8 @@ app.post('/api/evaluate', async (req: Request, res: Response) => {
           raw_points: scored?.raw_points,
           points: scored?.points,
           weight: scored?.weight,
-          effective_weight: scored?.max_points,
-          max_points: scored?.max_points,
+          effective_weight: scored?.effective_weight ?? scored?.max_points,
+          max_points: scored?.max_points ?? scored?.effective_weight,
           needs_review: it.needs_review || Boolean(flagMsg),
           review_reason: it.review_reason || flagMsg || null,
         };
@@ -327,8 +328,8 @@ app.post('/api/appeals/:id/decide', (req: Request, res: Response) => {
                 targetItem.raw_points = scored.raw_points;
                 targetItem.points = scored.points;
                 targetItem.weight = scored.weight;
-                targetItem.effective_weight = scored.max_points;
-                targetItem.max_points = scored.max_points;
+                targetItem.effective_weight = scored.effective_weight ?? scored.max_points;
+                targetItem.max_points = scored.max_points ?? scored.effective_weight;
               }
             }
           } catch {
