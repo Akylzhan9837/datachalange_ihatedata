@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="630" height="370" viewBox="0 0 630 370" fill="none">
+  <defs>
+    <linearGradient id="body" x1="214" y1="85" x2="497" y2="320" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#eafff4" stop-opacity=".91"/><stop offset=".16" stop-color="#64dab1" stop-opacity=".55"/><stop offset=".4" stop-color="#075741" stop-opacity=".78"/><stop offset=".62" stop-color="#28aa83" stop-opacity=".92"/><stop offset=".84" stop-color="#092e26" stop-opacity=".95"/><stop offset="1" stop-color="#64cfac" stop-opacity=".63"/>
+    </linearGradient>
+    <linearGradient id="seam" x1="266" y1="99" x2="470" y2="290" gradientUnits="userSpaceOnUse"><stop stop-color="#fff" stop-opacity=".88"/><stop offset=".28" stop-color="#b8ffdf" stop-opacity=".15"/><stop offset=".72" stop-color="#4dd7a6" stop-opacity=".04"/><stop offset="1" stop-color="#b9ffe5" stop-opacity=".85"/></linearGradient>
+    <radialGradient id="core"><stop stop-color="#05271e"/><stop offset=".53" stop-color="#0a7d5c" stop-opacity=".75"/><stop offset="1" stop-color="#9cf8d3" stop-opacity="0"/></radialGradient>
+    <radialGradient id="pearl" cx=".33" cy=".2" r=".81"><stop stop-color="#f4fffa" stop-opacity=".94"/><stop offset=".25" stop-color="#9bf5cb" stop-opacity=".49"/><stop offset=".6" stop-color="#1b986f" stop-opacity=".44"/><stop offset=".87" stop-color="#094f3a" stop-opacity=".79"/><stop offset="1" stop-color="#c4ffe9" stop-opacity=".8"/></radialGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="10"/></filter>
+    <filter id="soft"><feGaussianBlur stdDeviation="3.5"/></filter>
+    <path id="stone" d="M185 188C168 155 181 110 228 79c31-20 74-16 117-30 55-18 98-13 128 18 31 32 22 64 49 106 17 27 47 54 39 94-11 54-72 79-132 73-53-6-75-35-126-45-59-11-90-53-118-107Z"/>
+    <clipPath id="mask"><use href="#stone"/></clipPath>
+  </defs>
+  <ellipse cx="390" cy="302" rx="183" ry="32" fill="#0d7254" opacity=".24" filter="url(#blur)"/>
+  <use href="#stone" fill="url(#body)" stroke="url(#seam)" stroke-width="2"/>
+  <g clip-path="url(#mask)">
+    <ellipse cx="392" cy="186" rx="165" ry="126" fill="url(#core)" transform="rotate(24 392 186)"/>
+    <path d="M188 169c18-38 50-70 97-76 65-8 97-50 153-30 44 16 29 49 52 102 17 38 51 56 43 93-9 41-64 61-111 48-45-12-63-43-118-50-55-7-96-42-116-87Z" stroke="url(#seam)" stroke-width="16" opacity=".7" filter="url(#soft)"/>
+    <path d="M208 195c-5-35 34-65 82-70 61-6 106-59 155-29 38 24 17 63 53 106 24 29 24 54 3 76-24 25-67 22-102 3-35-19-56-48-102-51-35-2-71-12-89-35Z" stroke="url(#seam)" stroke-width="8" opacity=".67" filter="url(#soft)"/>
+    <path d="M213 133c25-29 45-36 82-39 43-4 71-38 119-38" stroke="#effff7" stroke-width="8" stroke-linecap="round" opacity=".59" filter="url(#soft)"/>
+    <path d="M195 153c14-23 31-42 58-54m191 225c45 9 97-12 111-53" stroke="#c8ffe6" stroke-width="1.5" opacity=".65" stroke-linecap="round"/>
+    <path d="M267 202c16-36 43-21 74-35 36-16 48-41 83-30 27 9 27 44 54 75 32 36 15 64-21 68-25 2-44-18-64-34-29-24-63-25-101-23-16 1-31-4-25-21Z" fill="#00392a" opacity=".38" filter="url(#blur)"/>
+    <path d="M227 222c39 26 82 9 116 29 34 20 57 54 104 60" stroke="#9af5ce" stroke-width="4" opacity=".64" filter="url(#soft)" stroke-linecap="round"/>
+    <path d="M466 101c23 33 17 61 42 98 23 34 34 60 5 86" stroke="#c6ffe7" stroke-width="4.5" opacity=".67" filter="url(#soft)" stroke-linecap="round"/>
+  </g>
+  <path d="M96 130c-15-9-14-28-5-39 12-16 24-14 42-20 18-7 37 4 39 20 1 13-7 20-12 33-9 23-40 21-64 6Z" fill="url(#pearl)" stroke="#d1ffe7" stroke-opacity=".6"/>
+  <path d="M92 103c5-14 17-20 38-24" stroke="#e7fff0" stroke-width="2.5" opacity=".72" stroke-linecap="round"/>
+  <circle cx="547" cy="79" r="31" fill="url(#pearl)" stroke="#d1ffe7" stroke-opacity=".65"/>
+  <circle cx="131" cy="244" r="16" fill="url(#pearl)" stroke="#d1ffe7" stroke-opacity=".55"/>
+  <circle cx="588" cy="162" r="8" fill="url(#pearl)" stroke="#d1ffe7" stroke-opacity=".48"/>
+</svg>

@@ -36,14 +36,15 @@ export async function getDialogues(groupId) {
   return result.data.records;
 }
 
+export const getEvaluationById = (id, signal) => optional('/evaluations/' + segment(id), signal);
 export const getEvaluation = (id, signal) => optional('/evaluations/by-conversation/' + segment(id), signal);
 export const getChecklist = (id, signal) => optional('/checklists/' + segment(id), signal);
 export const getChecklists = () => request('/checklists');
 export const saveChecklist = (body) => request('/checklists', { body });
 
-export async function runEvaluation(conversationId, checklistId) {
+export async function runEvaluation(conversationId, checklistId, force = false) {
   try {
-    return await request('/evaluate', { body: { conversation_id: conversationId, checklist_id: checklistId } });
+    return await request('/evaluate', { body: { conversation_id: conversationId, checklist_id: checklistId, ...(force ? { force: true } : {}) } });
   } catch (error) {
     if (error.status === 404 && error.message === 'HTTP 404') {
       throw new ApiError(404, 'На запущенном сервере нет POST /api/evaluate. Для оценки нужна интеграция ветки b1-backend.');
@@ -55,3 +56,5 @@ export async function runEvaluation(conversationId, checklistId) {
 export const getAppeals = (id, signal) => request('/appeals?evaluation_id=' + segment(id), { signal });
 export const createAppeal = (body) => request('/appeals', { body });
 export const decideAppeal = (id, body) => request('/appeals/' + segment(id) + '/decide', { body });
+
+export const getEvaluations = () => request("/evaluations");
