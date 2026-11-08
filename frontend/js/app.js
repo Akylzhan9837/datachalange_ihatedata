@@ -43,9 +43,11 @@ function renderTranscript(record) {
   byId('conversation-meta').textContent = record.conversation_id + ' · ' + channelName(record.channel) + ' · ' + record.language + ' · ' + record.transcript.length + ' репл.';
   const recording = byId('recording');
   recording.hidden = true;
-  recording.removeAttribute('href');
+  recording.pause();
+  recording.removeAttribute('src');
+  recording.load();
   if (typeof record.audio_url === 'string' && /^https?:\/\//i.test(record.audio_url)) {
-    recording.href = record.audio_url;
+    recording.src = record.audio_url;
     recording.hidden = false;
   }
 
