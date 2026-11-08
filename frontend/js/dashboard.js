@@ -68,6 +68,33 @@ function reviewedAt(result) {
   return Date.parse(result.evaluated_at) || 0;
 }
 
+async function showGross() {
+  location.hash = 'workspace';
+  byId('channel').value = '';
+  byId('language').value = '';
+  const search = byId('search');
+  search.value = '';
+  search.dispatchEvent(new Event('input'));
+  const gross = byId('gross-only');
+  gross.checked = true;
+  gross.dispatchEvent(new Event('change'));
+  const first = byId('dialogues').querySelector('button');
+  const id = first?.querySelector('.meta')?.textContent.split(' · ')[0];
+  if (!first || !id) return;
+  first.click();
+  for (let attempt = 0; attempt < 50; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (!byId('conversation-meta')?.textContent.startsWith(id)) continue;
+    const proof = [...document.querySelectorAll('details.criterion[open] button')].find((button) => /Реплика #/.test(button.textContent));
+    if (proof) {
+      proof.click();
+      return;
+    }
+  }
+}
+
+byId('show-gross').addEventListener('click', showGross);
+
 function openConversation(record) {
   location.hash = 'workspace';
   const search = byId('search');
