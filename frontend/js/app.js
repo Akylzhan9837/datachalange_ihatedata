@@ -41,7 +41,7 @@ function channelName(channel) {
 
 const SPEECH_CHARS_PER_SECOND = 15;
 const SPEECH_DEFAULT_SHIFT = 4;
-let speech = { cues: [], current: -1, shown: -1, shift: SPEECH_DEFAULT_SHIFT };
+let speech = { cues: [], current: -1, shift: SPEECH_DEFAULT_SHIFT };
 
 async function calibrateSpeech(src, conversationId) {
   try {
@@ -83,7 +83,7 @@ let speechFrame = 0;
 
 function speechCues(record) {
   const times = record.transcript.map((message) => Date.parse(message.timestamp));
-  if (!times.length || !times.every(Number.isFinite)) return { cues: [], current: -1, shown: -1, shift: SPEECH_DEFAULT_SHIFT };
+  if (!times.length || !times.every(Number.isFinite)) return { cues: [], current: -1, shift: SPEECH_DEFAULT_SHIFT };
   const startIndex = record.transcript.findIndex((message) => message.speaker === 'system' && /запущены|басталды|started/i.test(message.text));
   const zero = times[Math.max(0, startIndex)];
   let paused = 0;
@@ -103,7 +103,7 @@ function speechCues(record) {
     cues.push({ start, end, index, message, text });
     previousEnd = Math.max(previousEnd, end);
   });
-  return { cues, current: -1, shown: -1, shift: SPEECH_DEFAULT_SHIFT };
+  return { cues, current: -1, shift: SPEECH_DEFAULT_SHIFT };
 }
 
 function showSpeech() {
@@ -116,26 +116,17 @@ function showSpeech() {
   if (current !== speech.current) {
     document.querySelector('.message.speaking')?.classList.remove('speaking');
     speech.current = current;
-    speech.shown = -1;
     if (current < 0) {
       caption.hidden = true;
       return;
     }
     const { index, message } = speech.cues[current];
-    caption.replaceChildren(element('b', roles[message.speaker] ?? message.speaker), element('span', '', 'spoken'), element('span', '', 'upcoming'));
+    caption.replaceChildren(element('b', roles[message.speaker] ?? message.speaker), document.createTextNode(speech.cues[current].text));
     caption.hidden = false;
     const item = byId('message-' + (index + 1));
     item?.classList.add('speaking');
     if (!audio.paused) item?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
-  if (current < 0) return;
-  const { start, end, text } = speech.cues[current];
-  const progress = Math.min(1, Math.max(0, (at - start) / Math.max(end - start, 0.3)));
-  const letters = Math.round(text.length * progress);
-  if (letters === speech.shown) return;
-  speech.shown = letters;
-  caption.querySelector('.spoken').textContent = text.slice(0, letters);
-  caption.querySelector('.upcoming').textContent = text.slice(letters);
 }
 
 function followSpeech() {
@@ -151,7 +142,7 @@ function renderTranscript(record) {
   recording.pause();
   recording.removeAttribute('src');
   recording.load();
-  speech = { cues: [], current: -1, shown: -1, shift: SPEECH_DEFAULT_SHIFT };
+  speech = { cues: [], current: -1, shift: SPEECH_DEFAULT_SHIFT };
   byId('recording-caption').hidden = true;
   if (typeof record.audio_url === 'string' && /^https?:\/\//i.test(record.audio_url)) {
     speech = speechCues(record);
