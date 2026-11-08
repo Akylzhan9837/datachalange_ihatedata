@@ -9,11 +9,68 @@ class ApiError extends Error {
   }
 }
 
+const DEMO_MESSAGE = 'Демо-версия без сервера: это действие работает при локальном запуске (npm run dev, см. README).';
+let demo = false;
+let snapshotCheck = null;
+
+const snapshotAvailable = () => {
+  snapshotCheck ??= fetch('data/evaluations.json', { method: 'HEAD' }).then((response) => response.ok).catch(() => false);
+  return snapshotCheck;
+};
+
+async function loadSnapshot(file) {
+  const response = await fetch(file);
+  if (!response.ok) throw new ApiError(404);
+  return response.json();
+}
+
+async function snapshot(path) {
+  const [route, first, second] = new URL(path, location.href).pathname.split('/').filter(Boolean).map(decodeURIComponent);
+  if (route === 'sets') return loadSnapshot('data/sets/' + segment(first) + '.json');
+  if (route === 'checklists') {
+    const list = await loadSnapshot('data/checklists.json');
+    if (!first) return list;
+    const found = list.find((item) => item.id === first);
+    if (!found) throw new ApiError(404);
+    return found;
+  }
+  if (route === 'evaluations') {
+    const list = await loadSnapshot('data/evaluations.json');
+    if (!first) return list;
+    const found = first === 'by-conversation' ? list.filter((item) => item.conversation_id === second).at(-1) : list.find((item) => item.id === first);
+    if (!found) throw new ApiError(404);
+    return found;
+  }
+  if (route === 'appeals') return [];
+  throw new ApiError(503, DEMO_MESSAGE);
+}
+
+function enterDemo() {
+  if (demo) return;
+  demo = true;
+  document.documentElement.dataset.demo = '';
+  const note = document.createElement('p');
+  note.className = 'demo-banner';
+  note.textContent = 'Демо-версия без сервера: показаны сохранённые оценки DEV, только просмотр. Оценка, апелляции и редактор чек-листа работают при локальном запуске — см. README.';
+  document.body.prepend(note);
+}
+
 async function request(path, { signal, body } = {}) {
+  if (demo) {
+    if (body !== undefined) throw new ApiError(503, DEMO_MESSAGE);
+    return snapshot(path);
+  }
   const options = body === undefined
     ? { signal }
     : { signal, method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
-  const response = await fetch(apiBase + path, options);
+  let response;
+  try {
+    response = await fetch(apiBase + path, options);
+  } catch (error) {
+    if (signal?.aborted || params.has('api') || !(await snapshotAvailable())) throw error;
+    enterDemo();
+    return request(path, { signal, body });
+  }
   const payload = await response.json().catch(() => null);
   if (!response.ok) throw new ApiError(response.status, payload?.error);
   if (payload === null) throw new Error('Сервер вернул ответ без JSON.');
@@ -53,6 +110,7 @@ export async function runEvaluation(conversationId, checklistId, force = false) 
   }
 }
 
+export const getAudioSource = (url) => request('/audio?url=' + encodeURIComponent(url));
 export const getAppeals = (id, signal) => request('/appeals?evaluation_id=' + segment(id), { signal });
 export const createAppeal = (body) => request('/appeals', { body });
 export const decideAppeal = (id, body) => request('/appeals/' + segment(id) + '/decide', { body });
