@@ -1,0 +1,17 @@
+{
+  "v": 4,
+  "createdOnFiles": { "v": 1, "at": "2026-11-08T01:10:00Z" },
+  "lists": "css",
+  "title": "CQA ihatedata — защита",
+  "cover": "cover",
+  "order": ["cover", "what", "how", "trust", "demo"],
+  "sections": {
+    "intro": { "description": "Кто мы и что сделали.", "start": "cover" },
+    "system": { "description": "Что умеет система и как она устроена.", "start": "what" },
+    "proof": { "description": "Почему результатам можно верить, и переход к живому демо.", "start": "trust" }
+  },
+  "faces": {
+    "inter": { "family": "Inter", "href": "https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,300;1,400&display=swap" }
+  },
+  "designSystems": []
+}
