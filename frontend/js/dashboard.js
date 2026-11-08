@@ -154,12 +154,12 @@ function renderTrend(results) {
     container.append(caption);
   }
   if (!daily.length) {
-    const coverage = records?.length && evaluations !== null ? Math.round(100 * new Set(history.map((item) => item.conversation_id)).size / records.length) : null;
+    const coverage = records?.length && evaluations !== null ? Math.round(100 * new Set(results.map((item) => item.conversation_id)).size / records.length) : null;
     const message = unavailable ? 'Оценки недоступны' : evaluations === null || records === null ? 'Загружаем оценки…' : 'За этот период оценок пока нет';
     const empty = element('div', undefined, 'trend-empty');
     empty.append(element('span', '◌'), element('strong', message));
     if (!unavailable && evaluations !== null && records !== null) {
-      empty.append(element('p', coverage === null ? 'Динамика появится после сохранения оценок.' : 'Охват проверки: ' + coverage + '% · ' + new Set(history.map((item) => item.conversation_id)).size + ' из ' + records.length + ' диалогов.'));
+      empty.append(element('p', coverage === null ? 'Динамика появится после сохранения оценок.' : 'Охват проверки: ' + coverage + '% · ' + new Set(results.map((item) => item.conversation_id)).size + ' из ' + records.length + ' диалогов.'));
       const track = element('progress');
       track.max = 100;
       track.value = coverage ?? 0;

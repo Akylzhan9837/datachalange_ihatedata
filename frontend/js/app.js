@@ -1,4 +1,4 @@
-import { getChecklist, getChecklists, getDialogues, getEvaluation, getEvaluationById, runEvaluation } from './api.js';
+import { getAudioSource, getChecklist, getChecklists, getDialogues, getEvaluation, getEvaluationById, runEvaluation } from './api.js';
 import './dashboard.js';
 import { clearAppeals, openAppeal, renderAppeals } from './appeals.js';
 import { openEditor } from './editor.js';
@@ -47,7 +47,7 @@ function renderTranscript(record) {
   recording.removeAttribute('src');
   recording.load();
   if (typeof record.audio_url === 'string' && /^https?:\/\//i.test(record.audio_url)) {
-    recording.src = record.audio_url;
+    getAudioSource(record.audio_url).then(({ src }) => { if (activeId === record.conversation_id && src) recording.src = src; }).catch(() => {});
     byId('recording-player').hidden = false;
   }
 

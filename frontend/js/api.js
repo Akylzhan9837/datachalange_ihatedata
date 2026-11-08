@@ -53,6 +53,7 @@ export async function runEvaluation(conversationId, checklistId, force = false) 
   }
 }
 
+export const getAudioSource = (url) => request('/audio?url=' + encodeURIComponent(url));
 export const getAppeals = (id, signal) => request('/appeals?evaluation_id=' + segment(id), { signal });
 export const createAppeal = (body) => request('/appeals', { body });
 export const decideAppeal = (id, body) => request('/appeals/' + segment(id) + '/decide', { body });
