@@ -1,4 +1,4 @@
-import { getChecklist, getChecklists, getDialogues, getEvaluation, runEvaluation } from './api.js';
+import { getChecklist, getChecklists, getDialogues, getEvaluation, getEvaluations, runEvaluation } from './api.js';
 import { clearAppeals, openAppeal, renderAppeals } from './appeals.js';
 import { openEditor } from './editor.js';
 import { answerLabel, byId, button, element, errorText, fillOptions, number, setStatus } from './ui.js';
@@ -13,6 +13,7 @@ const retry = byId('retry');
 const search = byId('search');
 const channel = byId('channel');
 const language = byId('language');
+const grossOnly = byId('gross-only');
 let records = [];
 let activeId;
 let checklists = [];
@@ -21,9 +22,11 @@ let loading = false;
 let job;
 let activeResult;
 const sessionResults = new Map();
+const evaluationsByConversation = new Map();
 const picker = byId('checklist-picker');
 const batchButton = byId('run-batch');
 const singleButton = byId('run-single');
+const rerunButton = byId('rerun-single');
 const editorButton = byId('open-editor');
 const reviewer = byId('reviewer');
 const roles = { client: 'Клиент', operator: 'Оператор', bot: 'Бот', system: 'Система' };
@@ -135,6 +138,7 @@ function syncActions() {
   const hasChecklist = Boolean(selectedChecklist());
   batchButton.disabled = blocked || !records.length || !hasChecklist;
   singleButton.disabled = blocked || !activeId || !hasChecklist;
+  if (rerunButton) rerunButton.disabled = blocked || !activeId || !hasChecklist;
   editorButton.disabled = blocked || !hasChecklist;
   picker.disabled = blocked || !checklists.length;
   byId('group').disabled = blocked;
@@ -162,6 +166,7 @@ function renderHistory(result, checklist) {
 }
 
 function remember(result) {
+  if (result?.conversation_id) evaluationsByConversation.set(result.conversation_id, result);
   if (!result.id) return result;
   const known = sessionResults.get(result.id);
   const merged = { ...known, ...result };
@@ -210,9 +215,14 @@ async function selectDialogue(record, selectedButton) {
 
 function renderDialogues() {
   const query = search.value.trim().toLocaleLowerCase('ru');
+  const onlyGross = Boolean(grossOnly?.checked);
   const visible = records.filter((record) => {
     if (channel.value && record.channel !== channel.value) return false;
     if (language.value && record.language !== language.value) return false;
+    if (onlyGross) {
+      const ev = evaluationsByConversation.get(record.conversation_id);
+      if (!ev || !ev.gross_violation) return false;
+    }
     return !query || record.conversation_id.toLowerCase().includes(query) ||
       record.transcript.some((message) => message.text.toLocaleLowerCase('ru').includes(query));
   });
@@ -224,11 +234,17 @@ function renderDialogues() {
     const trigger = button('', () => selectDialogue(record, trigger), 'dialogue');
     if (record.conversation_id === activeId) trigger.setAttribute('aria-current', 'true');
     trigger.append(element('strong', preview || record.conversation_id));
-    trigger.append(element('span', record.conversation_id + ' · ' + record.language + ' · ' + channelName(record.channel), 'meta'));
+    const ev = evaluationsByConversation.get(record.conversation_id);
+    const metaEl = element('span', record.conversation_id + ' · ' + record.language + ' · ' + channelName(record.channel) + (ev?.gross_violation ? ' · ⚠️ Грубая ошибка' : ''), 'meta');
+    if (ev?.gross_violation) {
+      metaEl.style.color = '#ff9e8c';
+      metaEl.style.fontWeight = '600';
+    }
+    trigger.append(metaEl);
     item.append(trigger);
     return item;
   }));
-  setStatus(listStatus, visible.length ? '' : records.length ? 'По этим фильтрам диалогов нет.' : 'В наборе пока нет диалогов.');
+  setStatus(listStatus, visible.length ? '' : records.length ? (onlyGross ? 'Нет диалогов с грубыми ошибками.' : 'По этим фильтрам диалогов нет.') : 'В наборе пока нет диалогов.');
 }
 
 async function loadDialogues(requested) {
@@ -238,7 +254,15 @@ async function loadDialogues(requested) {
   retry.hidden = true;
   setStatus(listStatus, 'Загружаем диалоги…');
   try {
-    const incoming = await getDialogues(requested);
+    const [incoming, savedEvaluations] = await Promise.all([
+      getDialogues(requested),
+      getEvaluations().catch(() => [])
+    ]);
+    if (Array.isArray(savedEvaluations)) {
+      for (const ev of savedEvaluations) {
+        if (ev?.conversation_id) evaluationsByConversation.set(ev.conversation_id, ev);
+      }
+    }
     selection?.abort();
     records = incoming;
     groupId = requested;
@@ -248,6 +272,7 @@ async function loadDialogues(requested) {
     search.value = '';
     channel.value = '';
     language.value = '';
+    if (grossOnly) grossOnly.checked = false;
     byId('conversation-meta').textContent = '';
     byId('recording').hidden = true;
     transcript.replaceChildren();
@@ -279,8 +304,8 @@ async function loadChecklists() {
   }
 }
 
-async function evaluateOne(id, checklist) {
-  const result = await runEvaluation(id, checklist.id);
+async function evaluateOne(id, checklist, options = {}) {
+  const result = await runEvaluation(id, checklist.id, options);
   if (result.conversation_id !== id || result.checklist_id !== checklist.id || result.checklist_version !== checklist.version || !Array.isArray(result.items)) {
     const error = new Error('Сервер вернул оценку для другой версии чек-листа или другого диалога.');
     error.stop = true;
@@ -291,6 +316,7 @@ async function evaluateOne(id, checklist) {
     selection?.abort();
     displayEvaluation(saved, checklist);
   }
+  renderDialogues();
 }
 
 singleButton.addEventListener('click', async () => {
@@ -302,6 +328,23 @@ singleButton.addEventListener('click', async () => {
   setStatus(evaluationStatus, 'Оценка выполняется…');
   try {
     await evaluateOne(id, checklist);
+  } catch (error) {
+    if (activeId === id) setStatus(evaluationStatus, errorText(error));
+  } finally {
+    job = undefined;
+    syncActions();
+  }
+});
+
+rerunButton?.addEventListener('click', async () => {
+  const id = activeId;
+  const checklist = selectedChecklist();
+  if (job || !id || !checklist) return;
+  job = { type: 'single' };
+  syncActions();
+  setStatus(evaluationStatus, 'Принудительная переоценка (force: true)…');
+  try {
+    await evaluateOne(id, checklist, { force: true });
   } catch (error) {
     if (activeId === id) setStatus(evaluationStatus, errorText(error));
   } finally {
@@ -386,5 +429,6 @@ retry.addEventListener('click', () => {
 search.addEventListener('input', renderDialogues);
 channel.addEventListener('change', renderDialogues);
 language.addEventListener('change', renderDialogues);
+grossOnly?.addEventListener('change', renderDialogues);
 void loadDialogues(groupId);
 void loadChecklists();

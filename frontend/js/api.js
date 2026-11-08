@@ -37,13 +37,18 @@ export async function getDialogues(groupId) {
 }
 
 export const getEvaluation = (id, signal) => optional('/evaluations/by-conversation/' + segment(id), signal);
+export const getEvaluations = (signal) => optional('/evaluations', signal);
 export const getChecklist = (id, signal) => optional('/checklists/' + segment(id), signal);
 export const getChecklists = () => request('/checklists');
 export const saveChecklist = (body) => request('/checklists', { body });
 
-export async function runEvaluation(conversationId, checklistId) {
+export async function runEvaluation(conversationId, checklistId, options = {}) {
   try {
-    return await request('/evaluate', { body: { conversation_id: conversationId, checklist_id: checklistId } });
+    const body = { conversation_id: conversationId, checklist_id: checklistId };
+    if (options && options.force) {
+      body.force = true;
+    }
+    return await request('/evaluate', { body });
   } catch (error) {
     if (error.status === 404 && error.message === 'HTTP 404') {
       throw new ApiError(404, 'На запущенном сервере нет POST /api/evaluate. Для оценки нужна интеграция ветки b1-backend.');

@@ -26,6 +26,10 @@
           <select id="channel" aria-label="Тип диалога"><option value="">Все типы</option><option value="agent chat">Чаты</option><option value="voice call">Звонки</option></select>
           <select id="language" aria-label="Язык диалога"><option value="">Все языки</option><option value="RU">RU</option><option value="KZ">KZ</option><option value="EN">EN</option></select>
         </div>
+        <label class="gross-filter" style="display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 0.75rem; color: #ffb3a4; cursor: pointer; user-select: none;">
+          <input type="checkbox" id="gross-only" style="accent-color: #ff6b57;">
+          <span>Только грубые ошибки</span>
+        </label>
       </div>
       <p id="list-status" class="status" role="status">Загружаем диалоги…</p>
       <button type="button" id="retry" class="action" hidden>Повторить загрузку</button>
@@ -69,7 +73,10 @@
           <section class="panel" aria-labelledby="evaluation-title">
             <div class="panel-heading">
               <div><h2 id="evaluation-title">Оценка качества</h2><p class="meta">Баллы и доказательства</p></div>
-              <button type="button" id="run-single" class="action" disabled>Оценить</button>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" id="run-single" class="action" disabled>Оценить</button>
+                <button type="button" id="rerun-single" class="action" disabled title="Перезапустить с обходом кэша (force: true)">Перезапустить</button>
+              </div>
               <svg class="panel-icon" hidden aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 10l1 1 2-2m1 1h3m-7 6 1 1 2-2m1 1h3"/></svg>
             </div>
             <p id="evaluation-status" class="status" role="status">Выберите диалог.</p>
